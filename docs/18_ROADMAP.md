@@ -16,11 +16,14 @@
 - ダッシュボード/セッション履歴(一覧・詳細)/プロジェクト一覧・詳細/統計画面を実装(`08_SCREEN_DESIGN.md`)。永続化はまだJSONLベースの簡易集計(`apps/server/src/persistence/session-history.ts`が`~/.agentia/logs/*.jsonl`を都度スキャン)。
 - プロジェクト切替UI(`ProjectSwitcher`)と、サーバー再起動をまたいで永続化するプロジェクトレジストリ(`apps/server/src/persistence/project-registry.ts`、`~/.agentia/data/projects.json`)を実装。WebSocket自体は`projectId`単位のブロードキャストのまま(接続自体は`AppShell`が画面横断で1本を共有)。
 
-## 3. Phase 3 詳細
+## 3. Phase 3 詳細(実装済み)
 
-- `11_DATABASE_DESIGN.md`のスキーマでPostgreSQL導入、Prisma移行スクリプトでJSONLからバックフィル。
-- GitHub Webhook受信エンドポイント追加、`eventSource: "github"`イベントの正規化・GitHub連携スペースでの可視化(commit/push/PR/merge/issue/review)。
-- OTel(`OTEL_EXPORTER_OTLP_ENDPOINT`)連携オプションを追加し、トークン使用量・コスト・より正確なレイテンシをダッシュボードに表示(`04_CLAUDE_CODE_INTEGRATION.md`のC分類項目を解消)。
+- `packages/db`に`11_DATABASE_DESIGN.md`のスキーマをPrismaで実装(PostgreSQL)。`ProjectRegistry`・`session-history.ts`・`session-manager.ts`をJSONLファイルベースからPrisma経由の読み書きへ全面移行(`apps/server/src/persistence/db-writer.ts`)。FK整合性は「セッション行の存在を保証するPromise(`dbReady`)にEvent/Agent書き込みを連鎖させる」方式で、Ingest応答をブロックせずに担保している。
+  - 既存ローカルログを失わない移行用に`scripts/import-jsonl.ts`(`npm run import-jsonl`)を用意。JSONL+`projects.json`からPostgresへ冪等にバックフィル可能。
+- `POST /webhooks/github`(署名検証: `X-Hub-Signature-256` + `AGENTIA_GITHUB_WEBHOOK_SECRET`)を追加し、push/pull_request/issues/pull_request_reviewを`GithubEvent`テーブルへ正規化・保存。プロジェクトと連携先リポジトリの紐付けは`PUT /api/projects/:projectId/github-repo`とプロジェクト詳細画面のUIから設定可能。同画面に直近アクティビティ一覧を表示(`GET /api/projects/:projectId/github-events`)。
+- `POST /v1/metrics`でOTLP/HTTP JSONメトリクスを受信し、`claude_code.token.usage`/`claude_code.cost.usage`を`session.id`属性でセッションに紐付けて集計(`04_CLAUDE_CODE_INTEGRATION.md`のC分類項目を解消)。ダッシュボード・プロジェクト詳細・セッション詳細・統計画面にトークン数/推定コストを表示。
+
+未着手(Phase3スコープ外に後送り): レイテンシのOTelスパンからの正確な取得、GitHub連携イベントの office 上でのライブなキャラクター表現(現状はプロジェクト詳細画面のテキスト一覧のみ)。
 
 ## 4. Phase 4 詳細(ゲーム要素、設計のみ先行)
 

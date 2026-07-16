@@ -74,4 +74,4 @@ TypeScript strict mode / any禁止 / 責務分離 / マジックナンバー禁�
 
 ## 次のアクション
 
-[`docs/17_MVP_PLAN.md`](./docs/17_MVP_PLAN.md) の Track A(Hook連携基盤)から実装を開始します。
+MVP・Phase2・Phase3(PostgreSQL+Prisma永続化、GitHub連携、OTelトークン/コスト表示)まで実装済み。次は[`docs/18_ROADMAP.md`](./docs/18_ROADMAP.md) の Phase4(ゲーム要素)を参照。
