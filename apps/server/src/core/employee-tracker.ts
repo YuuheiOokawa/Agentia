@@ -1,7 +1,8 @@
 import { classifyTool } from "@agentia/shared-types";
 import type { AreaId, CharacterState, Employee, InternalEvent } from "@agentia/shared-types";
 
-const DEFAULT_AREA: AreaId = "dev_floor";
+/** docs/09_CHARACTER_SYSTEM.md #3: idle characters rest at their own desk, not the active work floor. */
+const DEFAULT_AREA: AreaId = "personal_desk";
 
 /**
  * Server-side mirror of an employee's last known discrete state, used only to build the
@@ -21,7 +22,7 @@ export function applyEventToEmployee(
     sessionId: event.sessionId,
     parentAgentId: event.parentAgentId,
     role: event.agentType,
-    displayName: event.agentId === "agent_main" ? "Claude (Main)" : event.agentId,
+    displayName: event.displayName,
     avatarVariant: Math.abs(hashCode(event.agentId)) % 8,
     state: "idle",
     areaId: DEFAULT_AREA,
@@ -55,6 +56,7 @@ export function applyEventToEmployee(
     }
     case "tool_result":
       state = "idle";
+      areaId = DEFAULT_AREA;
       hasWarning = false;
       break;
     case "tool_error":

@@ -45,6 +45,8 @@ export const EventSchema = z.object({
   agentId: z.string(),
   agentType: z.enum(EMPLOYEE_ROLES),
   parentAgentId: z.string().nullable(),
+  /** Correlator-assigned human-friendly name (e.g. "Explore #4"), authoritative across server + client (docs/09 #2.3). */
+  displayName: z.string(),
   eventType: z.enum(EVENT_TYPES),
   toolName: z.string().nullable(),
   status: z.enum(EVENT_STATUSES),

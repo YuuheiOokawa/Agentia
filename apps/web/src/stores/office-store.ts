@@ -93,8 +93,12 @@ function classifyForResolvedState(areaId: AreaId): CharacterState {
     case "meeting_room":
     case "pm_space":
       return "planning";
+    case "github_hub":
+      return "terminal";
     case "break_room":
       return "completed";
+    case "personal_desk":
+    case "server_room":
     default:
       return "idle";
   }

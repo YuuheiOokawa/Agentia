@@ -12,6 +12,7 @@ function baseEvent(overrides: Partial<InternalEvent>): InternalEvent {
     agentId: "agent_main",
     agentType: "main",
     parentAgentId: null,
+    displayName: "Claude (Main)",
     eventType: "tool_use",
     toolName: null,
     status: "running",

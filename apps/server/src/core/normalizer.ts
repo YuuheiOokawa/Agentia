@@ -64,6 +64,7 @@ function baseEvent(
     agentId: agent.agentId,
     agentType: agent.agentType,
     parentAgentId: agent.parentAgentId,
+    displayName: agent.displayName,
     eventType,
     timestamp: new Date().toISOString(),
     seq: 0, // assigned by the WebSocket hub (docs/06_REALTIME_COMMUNICATION.md #2) just before broadcast

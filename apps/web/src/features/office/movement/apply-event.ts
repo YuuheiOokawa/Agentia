@@ -2,7 +2,8 @@ import { classifyTool } from "@agentia/shared-types";
 import type { AreaId, CharacterState, Employee, InternalEvent } from "@agentia/shared-types";
 import { applyDesiredStep, priorityForState, type DesiredStep } from "./movement-queue";
 
-const DEFAULT_AREA: AreaId = "dev_floor";
+/** docs/09_CHARACTER_SYSTEM.md #3: idle characters rest at their own desk, not the active work floor. */
+const DEFAULT_AREA: AreaId = "personal_desk";
 
 function hashCode(value: string): number {
   let hash = 0;
@@ -19,7 +20,7 @@ function createEmployee(event: InternalEvent): Employee {
     sessionId: event.sessionId,
     parentAgentId: event.parentAgentId,
     role: event.agentType,
-    displayName: event.agentId === "agent_main" ? "Claude (Main)" : event.agentId,
+    displayName: event.displayName,
     avatarVariant: Math.abs(hashCode(event.agentId)) % 8,
     state: "idle",
     areaId: DEFAULT_AREA,
@@ -69,7 +70,7 @@ export function applyEvent(employees: Record<string, Employee>, event: InternalE
       break;
     }
     case "tool_result":
-      desired = { eventId: event.eventId, state: "idle", areaId: existing.areaId, priority: priorityForState("idle") };
+      desired = { eventId: event.eventId, state: "idle", areaId: DEFAULT_AREA, priority: priorityForState("idle") };
       hasWarning = false;
       break;
     case "tool_error":
