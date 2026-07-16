@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatTile } from "@/components/StatTile";
 import { useProjectStore, currentProjectId } from "@/stores/project-store";
 import { fetchStats, type StatsResponse } from "@/lib/api";
-import { formatPercent } from "@/lib/format";
+import { formatCost, formatPercent, formatTokens } from "@/lib/format";
 
 const RANGES = [
   { value: "day", label: "日" },
@@ -63,6 +63,9 @@ export function StatsScreen() {
               <StatTile label="セッション数" value={stats.sessionCount} />
               <StatTile label="テスト成功率" value={formatPercent(stats.testSuccessRate)} />
               <StatTile label="平均Sub Agent数/セッション" value={stats.averageSubAgentsPerSession.toFixed(1)} />
+              <StatTile label="入力トークン" value={formatTokens(stats.inputTokens)} />
+              <StatTile label="出力トークン" value={formatTokens(stats.outputTokens)} />
+              <StatTile label="推定コスト" value={formatCost(stats.costUsd)} />
             </div>
 
             <h3 style={{ fontSize: "0.9rem" }}>利用時間推移</h3>

@@ -14,6 +14,9 @@ export interface SessionSummary {
   testSuccessCount: number;
   testFailureCount: number;
   subAgentCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 const READ_TOOLS = new Set(["Read", "Grep", "Glob"]);
@@ -39,6 +42,9 @@ function summarize(session: SessionRow, events: EventRow[]): SessionSummary {
     testSuccessCount: 0,
     testFailureCount: 0,
     subAgentCount: 0,
+    inputTokens: session.inputTokens,
+    outputTokens: session.outputTokens,
+    costUsd: session.costUsd,
   };
 
   for (const event of events) {

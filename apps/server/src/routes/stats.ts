@@ -28,6 +28,9 @@ export function registerStatsRoute(fastify: FastifyInstance): void {
     let testSuccessCount = 0;
     let testFailureCount = 0;
     let subAgentTotal = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let costUsd = 0;
 
     for (const s of sessions) {
       if (s.endedAt) {
@@ -41,6 +44,9 @@ export function registerStatsRoute(fastify: FastifyInstance): void {
       testSuccessCount += s.testSuccessCount;
       testFailureCount += s.testFailureCount;
       subAgentTotal += s.subAgentCount;
+      inputTokens += s.inputTokens;
+      outputTokens += s.outputTokens;
+      costUsd += s.costUsd;
     }
 
     const toolTotal = editCount + readCount + bashCount || 1;
@@ -59,6 +65,9 @@ export function registerStatsRoute(fastify: FastifyInstance): void {
       },
       testSuccessRate: testTotal > 0 ? testSuccessCount / testTotal : null,
       averageSubAgentsPerSession: sessions.length > 0 ? subAgentTotal / sessions.length : 0,
+      inputTokens,
+      outputTokens,
+      costUsd,
     } satisfies {
       range: string;
       sessionCount: number;
@@ -66,6 +75,9 @@ export function registerStatsRoute(fastify: FastifyInstance): void {
       toolBreakdown: { edit: number; read: number; bash: number };
       testSuccessRate: number | null;
       averageSubAgentsPerSession: number;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd: number;
     });
   });
 }

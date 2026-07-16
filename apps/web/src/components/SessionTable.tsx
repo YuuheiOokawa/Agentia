@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { SessionSummary } from "@/lib/api";
-import { formatDateTime, formatDuration } from "@/lib/format";
+import { formatCost, formatDateTime, formatDuration } from "@/lib/format";
 
 /** docs/08_SCREEN_DESIGN.md #3: shared by the session-history list and a project's detail page. */
 export function SessionTable({ sessions }: { sessions: SessionSummary[] }) {
@@ -22,6 +22,7 @@ export function SessionTable({ sessions }: { sessions: SessionSummary[] }) {
             <th style={{ padding: "0.5rem" }}>Bash</th>
             <th style={{ padding: "0.5rem" }}>テスト成功/失敗</th>
             <th style={{ padding: "0.5rem" }}>Sub Agent</th>
+            <th style={{ padding: "0.5rem" }}>コスト</th>
           </tr>
         </thead>
         <tbody>
@@ -42,6 +43,7 @@ export function SessionTable({ sessions }: { sessions: SessionSummary[] }) {
                 {s.testSuccessCount}/{s.testFailureCount}
               </td>
               <td style={{ padding: "0.5rem" }}>{s.subAgentCount}</td>
+              <td style={{ padding: "0.5rem" }}>{s.costUsd > 0 ? formatCost(s.costUsd) : "—"}</td>
             </tr>
           ))}
         </tbody>

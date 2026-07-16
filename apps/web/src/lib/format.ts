@@ -14,3 +14,13 @@ export function formatPercent(ratio: number | null): string {
   if (ratio === null) return "—";
   return `${Math.round(ratio * 100)}%`;
 }
+
+export function formatCost(usd: number): string {
+  return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
+}
+
+export function formatTokens(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
+}

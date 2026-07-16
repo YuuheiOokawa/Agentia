@@ -9,7 +9,7 @@ import { ActivityLogList } from "@/components/ActivityLogList";
 import { useOfficeStore } from "@/stores/office-store";
 import { useProjectStore, currentProjectId } from "@/stores/project-store";
 import { fetchProject, type ProjectRecord } from "@/lib/api";
-import { formatDuration } from "@/lib/format";
+import { formatCost, formatDuration } from "@/lib/format";
 
 export function DashboardScreen() {
   // AppShell owns the WebSocket connection + project hydration (shared across every screen).
@@ -44,11 +44,12 @@ export function DashboardScreen() {
         )}
 
         {project && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
             <StatTile label="総利用時間" value={formatDuration(project.stats.totalActiveMs)} />
             <StatTile label="編集ファイル" value={project.stats.editCount} />
             <StatTile label="Bash実行" value={project.stats.bashCount} />
             <StatTile label="テスト成功/失敗" value={`${project.stats.testSuccessCount} / ${project.stats.testFailureCount}`} />
+            <StatTile label="推定コスト" value={formatCost(project.stats.costUsd)} />
           </div>
         )}
 

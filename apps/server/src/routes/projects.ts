@@ -14,6 +14,9 @@ function aggregate(summaries: SessionSummary[]) {
     testFailureCount: 0,
     subAgentCount: 0,
     totalActiveMs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
   };
   for (const s of summaries) {
     totals.editCount += s.editCount;
@@ -23,6 +26,9 @@ function aggregate(summaries: SessionSummary[]) {
     totals.testSuccessCount += s.testSuccessCount;
     totals.testFailureCount += s.testFailureCount;
     totals.subAgentCount += s.subAgentCount;
+    totals.inputTokens += s.inputTokens;
+    totals.outputTokens += s.outputTokens;
+    totals.costUsd += s.costUsd;
     if (s.endedAt) totals.totalActiveMs += Date.parse(s.endedAt) - Date.parse(s.startedAt);
   }
   return totals;

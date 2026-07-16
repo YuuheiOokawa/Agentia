@@ -10,6 +10,9 @@ export interface ProjectStats {
   testFailureCount: number;
   subAgentCount: number;
   totalActiveMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 export interface ProjectSummary {
@@ -51,6 +54,9 @@ export interface SessionSummary {
   testSuccessCount: number;
   testFailureCount: number;
   subAgentCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 export interface StatsResponse {
@@ -60,6 +66,9 @@ export interface StatsResponse {
   toolBreakdown: { edit: number; read: number; bash: number };
   testSuccessRate: number | null;
   averageSubAgentsPerSession: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 async function getJson<T>(path: string): Promise<T> {

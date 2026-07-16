@@ -16,7 +16,7 @@ import {
   type ProjectRecord,
   type SessionSummary,
 } from "@/lib/api";
-import { formatDateTime, formatDuration } from "@/lib/format";
+import { formatCost, formatDateTime, formatDuration, formatTokens } from "@/lib/format";
 
 const GITHUB_EVENT_ICON: Record<string, string> = {
   push: "📦",
@@ -94,6 +94,9 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
               <StatTile label="セッション数" value={project.stats.sessionCount} />
               <StatTile label="編集ファイル" value={project.stats.editCount} />
               <StatTile label="Sub Agent数" value={project.stats.subAgentCount} />
+              <StatTile label="入力トークン" value={formatTokens(project.stats.inputTokens)} />
+              <StatTile label="出力トークン" value={formatTokens(project.stats.outputTokens)} />
+              <StatTile label="推定コスト" value={formatCost(project.stats.costUsd)} />
             </div>
 
             <h3 style={{ fontSize: "0.9rem" }}>🐙 GitHub連携</h3>

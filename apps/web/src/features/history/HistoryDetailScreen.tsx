@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { StatTile } from "@/components/StatTile";
 import { fetchSession, fetchSessionEvents, type SessionSummary } from "@/lib/api";
-import { formatDateTime, formatDuration } from "@/lib/format";
+import { formatCost, formatDateTime, formatDuration, formatTokens } from "@/lib/format";
 
 interface EventRow {
   eventId: string;
@@ -50,6 +50,9 @@ export function HistoryDetailScreen({ sessionId }: { sessionId: string }) {
               <StatTile label="Bash実行" value={summary.bashCount} />
               <StatTile label="テスト成功/失敗" value={`${summary.testSuccessCount} / ${summary.testFailureCount}`} />
               <StatTile label="Sub Agent" value={summary.subAgentCount} />
+              <StatTile label="入力トークン" value={formatTokens(summary.inputTokens)} />
+              <StatTile label="出力トークン" value={formatTokens(summary.outputTokens)} />
+              <StatTile label="推定コスト" value={formatCost(summary.costUsd)} />
             </div>
           </>
         )}
