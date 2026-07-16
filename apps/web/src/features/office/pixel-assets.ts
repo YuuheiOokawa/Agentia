@@ -45,6 +45,8 @@ export function poseForState(state: CharacterState): CharacterPose {
 
 export const FLOOR_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_floor.png`);
 export const WALL_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_wall.png`);
+export const FLOOR_EDGE_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_floor_edge.png`);
+export const PARTITION_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_partition.png`);
 
 export const FURNITURE_TEXTURES: Record<FurnitureProp, Texture> = {
   desk: Texture.from(`${SPRITE_BASE}/prop_desk.png`),

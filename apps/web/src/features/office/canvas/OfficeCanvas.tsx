@@ -4,9 +4,9 @@ import { Stage, Container, Sprite, TilingSprite, Text } from "@pixi/react";
 import { TextStyle } from "pixi.js";
 import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
-import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, OFFICE_HEIGHT, OFFICE_WIDTH, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
+import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, OFFICE_HEIGHT, OFFICE_WIDTH, PHASE2_AREA_LAYOUT, roomDividers, type AreaLayout } from "../map/map";
 import { CharacterSprite } from "../characters/CharacterSprite";
-import { FLOOR_TEXTURE, FURNITURE_TEXTURES, WALL_TEXTURE } from "../pixel-assets";
+import { FLOOR_EDGE_TEXTURE, FLOOR_TEXTURE, FURNITURE_TEXTURES, PARTITION_TEXTURE, WALL_TEXTURE } from "../pixel-assets";
 
 const AREA_LABEL_STYLE = new TextStyle({
   fontSize: 12,
@@ -87,9 +87,44 @@ function AreaRoom({ area }: { area: AreaLayout }) {
   );
 }
 
+/** Fills the gaps between rooms so borders read as real corridors/walls instead of bare stage background
+ * showing through (docs/07 "部屋同士の境界をはっきりさせる") - rendered under the rooms themselves. */
+function RoomDividers() {
+  const { partitions, floorEdges } = roomDividers();
+  return (
+    <>
+      {floorEdges.map((edge, i) => (
+        <TilingSprite
+          key={`edge-${i}`}
+          texture={FLOOR_EDGE_TEXTURE}
+          x={edge.x}
+          y={edge.y}
+          width={edge.width}
+          height={edge.height}
+          tilePosition={{ x: 0, y: 0 }}
+          tileScale={{ x: 1, y: edge.height / FLOOR_EDGE_TEXTURE.height }}
+        />
+      ))}
+      {partitions.map((p, i) => (
+        <TilingSprite
+          key={`partition-${i}`}
+          texture={PARTITION_TEXTURE}
+          x={p.x}
+          y={p.y}
+          width={p.width}
+          height={p.height}
+          tilePosition={{ x: 0, y: 0 }}
+          tileScale={{ x: p.width / PARTITION_TEXTURE.width, y: p.width / PARTITION_TEXTURE.width }}
+        />
+      ))}
+    </>
+  );
+}
+
 function OfficeFloor() {
   return (
     <>
+      <RoomDividers />
       {PHASE2_AREA_LAYOUT.map((area) => (
         <AreaRoom key={area.areaId} area={area} />
       ))}

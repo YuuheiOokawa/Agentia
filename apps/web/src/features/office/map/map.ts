@@ -21,6 +21,7 @@ export const OFFICE_HEIGHT = 800;
 
 const ROW_Y = [20, 200, 450, 630] as const;
 const ROW_HEIGHT = [150, 220, 150, 140] as const;
+export { ROW_Y, ROW_HEIGHT };
 
 export const PHASE2_AREA_LAYOUT: readonly AreaLayout[] = [
   // Row 0
@@ -84,6 +85,54 @@ function hashCode(value: string): number {
     hash |= 0;
   }
   return Math.abs(hash);
+}
+
+export interface DividerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The gaps between rooms currently just show the stage background - this computes those gaps so
+ * OfficeCanvas can fill them with a visible divider (docs/07 "部屋同士の境界をはっきりさせる"):
+ * a vertical partition-wall strip between same-row neighbors, a horizontal raised-floor-edge strip
+ * between rows (which doubles as the corridor characters walk along in pathToArea).
+ */
+export function roomDividers(): { partitions: DividerRect[]; floorEdges: DividerRect[] } {
+  const byRow = new Map<number, AreaLayout[]>();
+  for (const area of PHASE2_AREA_LAYOUT) {
+    const list = byRow.get(area.row) ?? [];
+    list.push(area);
+    byRow.set(area.row, list);
+  }
+
+  const partitions: DividerRect[] = [];
+  for (const areas of byRow.values()) {
+    const sorted = [...areas].sort((a, b) => a.x - b.x);
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const left = sorted[i]!;
+      const right = sorted[i + 1]!;
+      const gapX = left.x + left.width;
+      const gapWidth = right.x - gapX;
+      if (gapWidth <= 0) continue;
+      const y = Math.min(left.y, right.y);
+      const height = Math.max(left.y + left.height, right.y + right.height) - y;
+      partitions.push({ x: gapX, y, width: gapWidth, height });
+    }
+  }
+
+  const floorEdges: DividerRect[] = [];
+  for (let i = 0; i < ROW_Y.length - 1; i += 1) {
+    const rowBottom = ROW_Y[i]! + ROW_HEIGHT[i]!;
+    const nextTop = ROW_Y[i + 1]!;
+    const gapHeight = nextTop - rowBottom;
+    if (gapHeight <= 0) continue;
+    floorEdges.push({ x: 20, y: rowBottom, width: OFFICE_WIDTH - 40, height: gapHeight });
+  }
+
+  return { partitions, floorEdges };
 }
 
 /** Center point of an area (used as a fallback and for the corridor/label math). */
