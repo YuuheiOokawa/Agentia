@@ -9,6 +9,7 @@ import { registerConnectionRoutes } from "./routes/connection.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerStatsRoute } from "./routes/stats.js";
+import { registerGithubWebhookRoute } from "./routes/github-webhook.js";
 import { registerWebSocketHub } from "./ws/hub.js";
 
 async function start(): Promise<void> {
@@ -38,6 +39,7 @@ async function start(): Promise<void> {
   registerProjectRoutes(fastify, projectRegistry);
   registerSessionRoutes(fastify);
   registerStatsRoute(fastify);
+  registerGithubWebhookRoute(fastify, projectRegistry);
   registerWebSocketHub(fastify, sessionManager);
 
   fastify.get("/healthz", async () => ({ ok: true }));
