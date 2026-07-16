@@ -436,6 +436,179 @@ function buildBaseGrid() {
 }
 
 /**
+ * キャラクター共通部分(後ろ向き)。
+ *
+ * 脚・靴・体格は正面と同じ形を流用し、
+ * 頭部だけ「後頭部(顔なし・髪で覆われる)」に差し替える。
+ *
+ * 歩いて画面奥(上方向)へ向かうときにこちらを表示する。
+ */
+function buildBackGrid() {
+  const grid = createGrid(
+    WIDTH,
+    HEIGHT
+  );
+
+  // ================================
+  // 脚(正面と同じ)
+  // ================================
+
+  fillRect(
+    grid,
+    7,
+    23,
+    4,
+    5,
+    "p"
+  );
+
+  fillRect(
+    grid,
+    13,
+    23,
+    4,
+    5,
+    "p"
+  );
+
+  fillRect(
+    grid,
+    7,
+    26,
+    4,
+    2,
+    "P"
+  );
+
+  fillRect(
+    grid,
+    13,
+    26,
+    4,
+    2,
+    "P"
+  );
+
+  fillRect(
+    grid,
+    6,
+    28,
+    5,
+    2,
+    "k"
+  );
+
+  fillRect(
+    grid,
+    13,
+    28,
+    5,
+    2,
+    "k"
+  );
+
+  // ================================
+  // 胴体(背中側)
+  // ================================
+
+  // アウトライン
+  fillRect(
+    grid,
+    5,
+    15,
+    14,
+    9,
+    "o"
+  );
+
+  // メインシャツ
+  fillRect(
+    grid,
+    6,
+    15,
+    12,
+    8,
+    "b"
+  );
+
+  // 肩まわりのハイライト
+  fillRect(
+    grid,
+    9,
+    15,
+    6,
+    2,
+    "c"
+  );
+
+  // 下側影
+  fillRect(
+    grid,
+    6,
+    21,
+    12,
+    2,
+    "a"
+  );
+
+  // 首(後ろは髪で大部分が隠れる)
+  fillRect(
+    grid,
+    10,
+    12,
+    4,
+    4,
+    "s"
+  );
+
+  // ================================
+  // 後頭部
+  // ================================
+
+  // 頭アウトライン(正面と同じ形)
+  fillEllipse(
+    grid,
+    12,
+    7,
+    8,
+    7,
+    "o"
+  );
+
+  // 髪で頭全体を覆う(顔パーツなし)
+  fillEllipse(
+    grid,
+    12,
+    7,
+    7,
+    6.5,
+    "h"
+  );
+
+  // 頭頂部のハイライト
+  fillEllipse(
+    grid,
+    12,
+    4,
+    7,
+    4,
+    "H"
+  );
+
+  // 中央の分け目影
+  fillRect(
+    grid,
+    11,
+    2,
+    2,
+    11,
+    "d"
+  );
+
+  return grid;
+}
+
+/**
  * ポーズごとの腕を追加。
  */
 function addPose(
@@ -617,15 +790,24 @@ function buildDetailsLayer(
   return details;
 }
 
+/** キャラクターが向く方向。"front" は画面手前、"back" は画面奥(移動中に上方向へ歩くときなど)。 */
+const FACINGS = ["front", "back"];
+
 /**
- * キャラクター1ポーズ生成。
+ * キャラクター1ポーズ×1方向を生成。
  */
 function generatePose(
-  pose
+  pose,
+  facing
 ) {
+  const baseGrid =
+    facing === "back"
+      ? buildBackGrid()
+      : buildBaseGrid();
+
   const combined =
     addPose(
-      buildBaseGrid(),
+      baseGrid,
       pose
     );
 
@@ -664,7 +846,7 @@ function generatePose(
   writePng(
     bodyPng,
     new URL(
-      `../../apps/web/public/sprites/char_${pose}_body.png`,
+      `../../apps/web/public/sprites/char_${pose}_${facing}_body.png`,
       import.meta.url
     )
   );
@@ -672,14 +854,14 @@ function generatePose(
   writePng(
     detailsPng,
     new URL(
-      `../../apps/web/public/sprites/char_${pose}_details.png`,
+      `../../apps/web/public/sprites/char_${pose}_${facing}_details.png`,
       import.meta.url
     )
   );
 }
 
 /**
- * 全キャラクターポーズ生成。
+ * 全キャラクターポーズ×全方向を生成。
  */
 export function generateCharacters() {
   for (
@@ -687,9 +869,14 @@ export function generateCharacters() {
       POSES
     )
   ) {
-    generatePose(
-      pose
-    );
+    for (
+      const facing of FACINGS
+    ) {
+      generatePose(
+        pose,
+        facing
+      );
+    }
   }
 
   console.log(

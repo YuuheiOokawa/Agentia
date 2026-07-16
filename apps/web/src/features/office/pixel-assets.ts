@@ -8,19 +8,22 @@ BaseTexture.defaultOptions.scaleMode = SCALE_MODES.NEAREST;
 const SPRITE_BASE = "/sprites";
 
 export type CharacterPose = "idle" | "working" | "error" | "completed";
+/** Which way the character is drawn facing - "front" (toward the viewer) or "back" (walking away/up),
+ * a pure rendering flourish driven by movement direction (like the wander stroll), not store state. */
+export type Facing = "front" | "back";
 
-function pairTexture(pose: CharacterPose) {
+function pairTexture(pose: CharacterPose, facing: Facing) {
   return {
-    body: Texture.from(`${SPRITE_BASE}/char_${pose}_body.png`),
-    details: Texture.from(`${SPRITE_BASE}/char_${pose}_details.png`),
+    body: Texture.from(`${SPRITE_BASE}/char_${pose}_${facing}_body.png`),
+    details: Texture.from(`${SPRITE_BASE}/char_${pose}_${facing}_details.png`),
   };
 }
 
-export const CHARACTER_TEXTURES: Record<CharacterPose, { body: Texture; details: Texture }> = {
-  idle: pairTexture("idle"),
-  working: pairTexture("working"),
-  error: pairTexture("error"),
-  completed: pairTexture("completed"),
+export const CHARACTER_TEXTURES: Record<CharacterPose, Record<Facing, { body: Texture; details: Texture }>> = {
+  idle: { front: pairTexture("idle", "front"), back: pairTexture("idle", "back") },
+  working: { front: pairTexture("working", "front"), back: pairTexture("working", "back") },
+  error: { front: pairTexture("error", "front"), back: pairTexture("error", "back") },
+  completed: { front: pairTexture("completed", "front"), back: pairTexture("completed", "back") },
 };
 
 /** docs/09_CHARACTER_SYSTEM.md #3 states collapse onto a small set of sprite poses. */

@@ -3,18 +3,21 @@
 import { useRef } from "react";
 import { Container, Graphics, Sprite, Text } from "@pixi/react";
 import { useTick } from "@pixi/react";
-import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics } from "pixi.js";
+import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics, type Sprite as PixiSprite } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
-import { areaSlotFor, pathToArea } from "../map/map";
-import { CHARACTER_TEXTURES, poseForState } from "../pixel-assets";
+import { areaSlotFor, areaWanderBounds, pathToArea } from "../map/map";
+import { CHARACTER_TEXTURES, poseForState, type Facing } from "../pixel-assets";
 
 const WALK_SPEED_PX_PER_MS = 0.09;
 const ARRIVAL_EPSILON_PX = 1.5;
-/** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/completed characters take a short stroll near their desk
- * every few seconds instead of standing frozen - this is purely a rendering-layer flourish, not store state. */
-const WANDER_MIN_DELAY_MS = 2200;
-const WANDER_MAX_DELAY_MS = 5200;
-const WANDER_RADIUS_PX = 22;
+/** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam their whole room
+ * every few seconds instead of standing frozen at their desk - this is purely a rendering-layer
+ * flourish, not store state. */
+const WANDER_MIN_DELAY_MS = 1500;
+const WANDER_MAX_DELAY_MS = 4000;
+/** Below this vertical speed, a moving character keeps its current facing instead of flickering
+ * between front/back on near-horizontal movement. */
+const FACING_DEADZONE_PX = 1.5;
 
 /** Raw sprites are a 24x30 pixel-art grid rasterized at 5x (docs: real bitmap assets, not vector shapes).
  * 0.272 (not 0.34) keeps the on-screen footprint the same as the old 16x20@6x sprites (120*0.272 == 96*0.34),
@@ -51,7 +54,7 @@ const STATE_ICON: Record<string, string> = {
   completed: "✅",
 };
 
-const WANDERABLE_STATES = new Set(["idle", "completed"]);
+const WANDERABLE_STATES = new Set(["idle", "waiting", "completed"]);
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -71,11 +74,15 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
 
   const outerRef = useRef<PixiContainer | null>(null);
   const bodyGroupRef = useRef<PixiContainer | null>(null);
+  const bodySpriteRef = useRef<PixiSprite | null>(null);
+  const detailsSpriteRef = useRef<PixiSprite | null>(null);
   const posRef = useRef({ ...initialPos });
   const pathRef = useRef<Array<{ x: number; y: number }>>([]);
   const lastAreaIdRef = useRef<AreaId>(employee.areaId);
   const wanderDeadlineRef = useRef<number>(Date.now() + WANDER_MIN_DELAY_MS + Math.random() * 1500);
   const clockRef = useRef(Math.random() * 1000);
+  /** Which way the character last faced - "back" while walking up/away, "front" otherwise. */
+  const facingRef = useRef<Facing>("front");
 
   useTick((delta) => {
     clockRef.current += delta;
@@ -94,6 +101,9 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         pathRef.current = pathRef.current.slice(1);
       } else {
         moving = true;
+        const dy = next.y - posRef.current.y;
+        if (dy < -FACING_DEADZONE_PX) facingRef.current = "back";
+        else if (dy > FACING_DEADZONE_PX) facingRef.current = "front";
         const step = Math.min(dist, WALK_SPEED_PX_PER_MS * delta * 16.6667);
         const ratio = step / dist;
         posRef.current = {
@@ -102,12 +112,12 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         };
       }
     } else if (WANDERABLE_STATES.has(employee.state) && Date.now() > wanderDeadlineRef.current) {
-      const base = areaSlotFor(employee.areaId, employee.agentId);
-      const angle = Math.random() * Math.PI * 2;
-      const radius = WANDER_RADIUS_PX * (0.4 + Math.random() * 0.6);
-      pathRef.current = [{ x: base.x + Math.cos(angle) * radius, y: base.y + Math.sin(angle) * radius }];
+      const bounds = areaWanderBounds(employee.areaId);
+      pathRef.current = [{ x: bounds.x + Math.random() * bounds.width, y: bounds.y + Math.random() * bounds.height }];
       wanderDeadlineRef.current = Date.now() + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
     }
+
+    if (!moving) facingRef.current = "front";
 
     if (outerRef.current) {
       outerRef.current.position.set(posRef.current.x, posRef.current.y);
@@ -122,12 +132,16 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         bodyGroupRef.current.position.y = 3;
       }
     }
+
+    const facedTextures = CHARACTER_TEXTURES[poseForState(employee.state)][facingRef.current];
+    if (bodySpriteRef.current) bodySpriteRef.current.texture = facedTextures.body;
+    if (detailsSpriteRef.current) detailsSpriteRef.current.texture = facedTextures.details;
   });
 
   const tint = shadeColor(ROLE_COLOR[employee.role] ?? ROLE_COLOR["generic"] ?? 0x757575, employee.avatarVariant);
   const icon = STATE_ICON[employee.state] ?? "";
   const pose = poseForState(employee.state);
-  const textures = CHARACTER_TEXTURES[pose];
+  const textures = CHARACTER_TEXTURES[pose][facingRef.current];
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
@@ -142,8 +156,8 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       <Container ref={bodyGroupRef}>
         {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
             (hair/skin/eyes/pants), so per-role/avatar tinting never discolors skin or hair. */}
-        <Sprite texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
-        <Sprite texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
+        <Sprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
+        <Sprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
       </Container>
       {icon && <Text text={icon} x={-7} y={-50} style={ICON_STYLE} />}
       <Text text={employee.displayName} x={0} y={16} anchor={0.5} style={NAME_STYLE} />

@@ -142,6 +142,17 @@ export function areaCenter(areaId: AreaId): { x: number; y: number } {
   return { x: area.x + area.width / 2, y: area.y + area.height / 2 };
 }
 
+/** The padded interior rect a character may roam within without walking into the wall/label band
+ * (same padding as areaSlots) - lets idle/waiting/completed characters wander the whole room instead
+ * of a tiny fixed radius near their desk (docs/10 #6 liveliness). */
+export function areaWanderBounds(areaId: AreaId): { x: number; y: number; width: number; height: number } {
+  const area = AREA_LAYOUT_BY_ID.get(areaId);
+  if (!area) return { x: 0, y: 0, width: OFFICE_WIDTH, height: OFFICE_HEIGHT };
+  const topPad = 40;
+  const sidePad = 24;
+  return { x: area.x + sidePad, y: area.y + topPad, width: area.width - sidePad * 2, height: area.height - topPad - sidePad };
+}
+
 /** All desk-slot positions inside an area, arranged in its slotGrid (docs/10 #3). */
 export function areaSlots(areaId: AreaId): Array<{ x: number; y: number }> {
   const area = AREA_LAYOUT_BY_ID.get(areaId);
