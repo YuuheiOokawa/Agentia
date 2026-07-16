@@ -45,6 +45,24 @@ export const AREA_LAYOUT_BY_ID: ReadonlyMap<AreaId, AreaLayout> = new Map(
   PHASE2_AREA_LAYOUT.map((area) => [area.areaId, area])
 );
 
+export type FurnitureProp = "desk" | "bookshelf" | "plant" | "server" | "reception";
+
+/** Which pixel-art prop decorates each area's desk slots (docs/10 #2 area definitions). */
+export const AREA_FURNITURE: Record<AreaId, FurnitureProp> = {
+  library: "bookshelf",
+  research_space: "desk",
+  meeting_room: "desk",
+  pm_space: "desk",
+  dev_floor: "desk",
+  personal_desk: "desk",
+  server_room: "server",
+  terminal_room: "desk",
+  qa_room: "desk",
+  deploy_area: "desk",
+  github_hub: "reception",
+  break_room: "plant",
+};
+
 const CORRIDOR_X = OFFICE_WIDTH / 2;
 const ROW_CORRIDOR_Y = ROW_Y.map((y, i) => y + ROW_HEIGHT[i]! / 2);
 

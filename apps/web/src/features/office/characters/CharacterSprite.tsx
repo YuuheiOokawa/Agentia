@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef } from "react";
-import { Container, Graphics, Text } from "@pixi/react";
+import { Container, Graphics, Sprite, Text } from "@pixi/react";
 import { useTick } from "@pixi/react";
 import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
 import { areaSlotFor, pathToArea } from "../map/map";
+import { CHARACTER_TEXTURES, poseForState } from "../pixel-assets";
 
 const WALK_SPEED_PX_PER_MS = 0.09;
 const ARRIVAL_EPSILON_PX = 1.5;
@@ -14,6 +15,9 @@ const ARRIVAL_EPSILON_PX = 1.5;
 const WANDER_MIN_DELAY_MS = 2200;
 const WANDER_MAX_DELAY_MS = 5200;
 const WANDER_RADIUS_PX = 22;
+
+/** Raw sprites are a 16x20 pixel-art grid rasterized at 6x (docs: real bitmap assets, not vector shapes). */
+const SPRITE_SCALE = 0.34;
 
 const ICON_STYLE = new TextStyle({ fontSize: 13 });
 const NAME_STYLE = new TextStyle({ fontSize: 11, fill: 0x1a1d23, fontWeight: "600" });
@@ -109,34 +113,24 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     if (bodyGroupRef.current) {
       const t = clockRef.current * 0.001;
       if (moving) {
-        bodyGroupRef.current.scale.set(1, 1 + Math.sin(t * 26) * 0.06);
-        bodyGroupRef.current.position.y = Math.abs(Math.sin(t * 13)) * -3;
+        bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 26) * 0.06));
+        bodyGroupRef.current.position.y = 3 + Math.abs(Math.sin(t * 13)) * -3;
       } else {
-        bodyGroupRef.current.scale.set(1, 1 + Math.sin(t * 2.4) * 0.02);
-        bodyGroupRef.current.position.y = 0;
+        bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
+        bodyGroupRef.current.position.y = 3;
       }
     }
   });
 
-  const color = shadeColor(ROLE_COLOR[employee.role] ?? ROLE_COLOR["generic"] ?? 0x757575, employee.avatarVariant);
+  const tint = shadeColor(ROLE_COLOR[employee.role] ?? ROLE_COLOR["generic"] ?? 0x757575, employee.avatarVariant);
   const icon = STATE_ICON[employee.state] ?? "";
+  const pose = poseForState(employee.state);
+  const textures = CHARACTER_TEXTURES[pose];
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
-    g.beginFill(0x000000, 0.16);
-    g.drawEllipse(0, 15, 11, 4);
-    g.endFill();
-  };
-
-  const drawBody = (g: PixiGraphics) => {
-    g.clear();
-    g.beginFill(color);
-    g.lineStyle(2, employee.hasWarning ? 0xe53935 : 0xffffff, 1);
-    g.drawRoundedRect(-8, -2, 16, 16, 6); // torso
-    g.endFill();
-    g.beginFill(shadeColor(color, 7));
-    g.lineStyle(1.5, 0xffffff, 1);
-    g.drawCircle(0, -10, 8); // head
+    g.beginFill(0x000000, 0.18);
+    g.drawEllipse(0, 4, 11, 4);
     g.endFill();
   };
 
@@ -144,11 +138,14 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     <Container ref={outerRef}>
       <Graphics draw={drawShadow} />
       <Container ref={bodyGroupRef}>
-        <Graphics draw={drawBody} />
-        {icon && <Text text={icon} x={-7} y={-30} style={ICON_STYLE} />}
+        {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
+            (hair/skin/eyes/pants), so per-role/avatar tinting never discolors skin or hair. */}
+        <Sprite texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
+        <Sprite texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
       </Container>
-      <Text text={employee.displayName} x={0} y={22} anchor={0.5} style={NAME_STYLE} />
-      {employee.currentTask && <Text text={employee.currentTask} x={0} y={36} anchor={0.5} style={TASK_STYLE} />}
+      {icon && <Text text={icon} x={-7} y={-50} style={ICON_STYLE} />}
+      <Text text={employee.displayName} x={0} y={16} anchor={0.5} style={NAME_STYLE} />
+      {employee.currentTask && <Text text={employee.currentTask} x={0} y={30} anchor={0.5} style={TASK_STYLE} />}
     </Container>
   );
 }

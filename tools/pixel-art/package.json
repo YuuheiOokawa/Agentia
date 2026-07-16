@@ -1,0 +1,9 @@
+{
+  "name": "pixel-art-tools",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

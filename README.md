@@ -55,6 +55,8 @@ agentia/
 │   ├── hook-forwarder/      # Claude Code Hooksからの受信・転送CLI(agentia-hook)
 │   ├── shared-types/        # イベントスキーマ・APIの型(Zod)をフロント/バック共有
 │   └── db/                  # (Phase3〜) Prisma schema・マイグレーション
+├── tools/
+│   └── pixel-art/           # ドット絵スプライト生成パイプライン(pngjs、apps/web/public/spritesへ出力)
 ├── docs/                    # 本設計ドキュメント一式
 ├── turbo.json
 └── package.json
@@ -62,6 +64,7 @@ agentia/
 
 - `apps/web`: 画面・キャラクター描画・状態管理。詳細は`13_FRONTEND_DESIGN.md`。
 - `apps/server`: Hookイベントの正規化・相関・WebSocket配信。詳細は`14_BACKEND_DESIGN.md`。
+- `tools/pixel-art`: キャラクター・什器・床/壁のドット絵を手続き生成しPNG化するスクリプト(`node tools/pixel-art/generate.mjs`で再生成)。詳細は`07_UI_UX_DESIGN.md` 2.1節。
 - `packages/hook-forwarder`: `.claude/settings.json`から呼び出される転送用CLI。詳細は`04_CLAUDE_CODE_INTEGRATION.md`。
 - `packages/shared-types`: `05_EVENT_DESIGN.md`のイベントスキーマ、`12_API_DESIGN.md`のAPI型をZodで定義し両アプリから参照する。
 
