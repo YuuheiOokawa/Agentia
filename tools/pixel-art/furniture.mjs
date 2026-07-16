@@ -1,113 +1,582 @@
-import { createGrid, fillRect, fillEllipse, gridToStrings } from "./lib/shapes.mjs";
-import { rasterizeGrid, writePng } from "./lib/raster.mjs";
+import {
+  createGrid,
+  fillRect,
+  fillEllipse,
+  gridToStrings,
+} from "./lib/shapes.mjs";
+
+import {
+  rasterizeGrid,
+  writePng,
+} from "./lib/raster.mjs";
 
 const SCALE = 5;
 
+/**
+ * カイロソフト風の家具用共通パレット。
+ *
+ * 全体的に
+ * ・濃いアウトライン
+ * ・中間色
+ * ・明るいハイライト
+ *
+ * の3段階以上を使って、
+ * 小さいスプライトでも立体感が出るようにする。
+ */
+const COLORS = {
+  outline: [67, 53, 43, 255],
+
+  woodDark: [94, 61, 37, 255],
+  wood: [143, 94, 52, 255],
+  woodLight: [189, 137, 80, 255],
+  woodHighlight: [224, 177, 111, 255],
+
+  metalDark: [51, 60, 69, 255],
+  metal: [83, 94, 103, 255],
+  metalLight: [139, 151, 158, 255],
+
+  screenDark: [39, 83, 100, 255],
+  screen: [89, 190, 210, 255],
+  screenLight: [173, 232, 236, 255],
+
+  greenDark: [44, 105, 59, 255],
+  green: [74, 150, 78, 255],
+  greenLight: [123, 190, 94, 255],
+
+  potDark: [126, 76, 48, 255],
+  pot: [183, 112, 67, 255],
+  potLight: [219, 155, 102, 255],
+
+  darkBlue: [37, 54, 73, 255],
+  blue: [65, 88, 112, 255],
+  blueLight: [104, 135, 163, 255],
+
+  black: [35, 39, 42, 255],
+
+  white: [237, 232, 220, 255],
+
+  red: [183, 73, 63, 255],
+  yellow: [211, 164, 65, 255],
+  bookBlue: [72, 113, 150, 255],
+  bookGreen: [78, 137, 90, 255],
+};
+
 function save(grid, palette, name) {
-  const png = rasterizeGrid(gridToStrings(grid), palette, { scale: SCALE });
-  writePng(png, new URL(`../../apps/web/public/sprites/prop_${name}.png`, import.meta.url));
+  const png = rasterizeGrid(
+    gridToStrings(grid),
+    palette,
+    {
+      scale: SCALE,
+    }
+  );
+
+  writePng(
+    png,
+    new URL(
+      `../../apps/web/public/sprites/prop_${name}.png`,
+      import.meta.url
+    )
+  );
 }
 
+/**
+ * PC付きデスク
+ *
+ * 正面から見た机ではなく、
+ * 少し上から見下ろした立体的な形にする。
+ */
 function generateDesk() {
-  const grid = createGrid(20, 20);
-  fillRect(grid, 6, 4, 8, 7, "f"); // monitor frame
-  fillRect(grid, 7, 5, 6, 5, "c"); // screen glow
-  fillRect(grid, 9, 11, 2, 3, "g"); // monitor stand
-  fillRect(grid, 1, 14, 18, 3, "d"); // desk top
-  fillRect(grid, 2, 17, 2, 3, "g"); // left leg
-  fillRect(grid, 16, 17, 2, 3, "g"); // right leg
+  const grid = createGrid(28, 28);
+
+  // ================================
+  // デスク天板
+  // ================================
+
+  // アウトライン
+  fillRect(grid, 2, 15, 24, 7, "O");
+
+  // 天板正面
+  fillRect(grid, 3, 16, 22, 5, "W");
+
+  // 天板上面
+  fillRect(grid, 4, 13, 20, 4, "L");
+
+  // ハイライト
+  fillRect(grid, 5, 13, 18, 1, "H");
+
+  // 左右の脚
+  fillRect(grid, 4, 21, 4, 6, "D");
+  fillRect(grid, 20, 21, 4, 6, "D");
+
+  // 脚のハイライト
+  fillRect(grid, 5, 21, 1, 5, "W");
+  fillRect(grid, 21, 21, 1, 5, "W");
+
+  // ================================
+  // モニター
+  // ================================
+
+  // モニター外枠
+  fillRect(grid, 8, 3, 12, 10, "M");
+
+  // モニター縁
+  fillRect(grid, 9, 4, 10, 8, "m");
+
+  // 画面
+  fillRect(grid, 10, 5, 8, 6, "S");
+
+  // 画面ハイライト
+  fillRect(grid, 11, 5, 6, 1, "s");
+
+  // コードっぽい表示
+  fillRect(grid, 11, 7, 4, 1, "s");
+  fillRect(grid, 13, 9, 4, 1, "s");
+
+  // モニタースタンド
+  fillRect(grid, 13, 13, 2, 3, "M");
+
+  // 台座
+  fillRect(grid, 11, 15, 6, 1, "M");
+
+  // ================================
+  // キーボード
+  // ================================
+
+  fillRect(grid, 9, 17, 10, 3, "M");
+  fillRect(grid, 10, 17, 8, 1, "m");
+
+  // ================================
+  // マグカップ
+  // ================================
+
+  fillRect(grid, 21, 10, 3, 4, "C");
+  fillRect(grid, 24, 11, 1, 2, "C");
+
   save(
     grid,
     {
-      f: [55, 65, 81, 255],
-      c: [125, 211, 252, 255],
-      g: [87, 63, 42, 255],
-      d: [139, 101, 62, 255],
+      O: COLORS.outline,
+
+      D: COLORS.woodDark,
+      W: COLORS.wood,
+      L: COLORS.woodLight,
+      H: COLORS.woodHighlight,
+
+      M: COLORS.metalDark,
+      m: COLORS.metal,
+
+      S: COLORS.screen,
+      s: COLORS.screenLight,
+
+      C: COLORS.white,
     },
     "desk"
   );
 }
 
+/**
+ * 本棚
+ *
+ * 単なる四角形ではなく、
+ * 太い木枠と奥行きを持たせる。
+ */
 function generateBookshelf() {
-  const grid = createGrid(18, 22, "w");
-  fillRect(grid, 1, 1, 16, 20, "i"); // interior
-  // 3 shelf bands with book spines
-  const spineColors = ["r", "y", "n", "x"];
-  let colorIdx = 0;
-  for (const shelfY of [2, 9, 16]) {
-    fillRect(grid, 1, shelfY + 6, 16, 1, "w"); // shelf board line
-    for (let x = 2; x < 17; x += 2) {
-      const ch = spineColors[colorIdx % spineColors.length];
-      colorIdx += 1;
-      fillRect(grid, x, shelfY, 1, 6, ch);
+  const grid = createGrid(24, 30);
+
+  // 外枠
+  fillRect(grid, 2, 1, 20, 28, "O");
+
+  // 本棚本体
+  fillRect(grid, 3, 2, 18, 26, "D");
+
+  // 左側ハイライト
+  fillRect(grid, 3, 2, 2, 26, "L");
+
+  // 内部
+  fillRect(grid, 6, 4, 13, 22, "I");
+
+  // 棚板
+  for (const y of [10, 17, 24]) {
+    fillRect(grid, 5, y, 15, 2, "W");
+    fillRect(grid, 6, y, 13, 1, "H");
+  }
+
+  const books = [
+    "R",
+    "Y",
+    "B",
+    "G",
+    "Y",
+    "R",
+    "B",
+    "G",
+  ];
+
+  let index = 0;
+
+  for (const shelfY of [5, 12, 19]) {
+    let x = 7;
+
+    while (x < 18) {
+      const color = books[index % books.length];
+
+      const height =
+        index % 3 === 0
+          ? 5
+          : index % 3 === 1
+            ? 6
+            : 4;
+
+      fillRect(
+        grid,
+        x,
+        shelfY + 5 - height,
+        2,
+        height,
+        color
+      );
+
+      // 本のハイライト
+      fillRect(
+        grid,
+        x,
+        shelfY + 5 - height,
+        1,
+        height,
+        "Q"
+      );
+
+      x += 2;
+      index += 1;
     }
   }
+
+  // 一番上の装飾
+  fillRect(grid, 7, 2, 10, 1, "H");
+
   save(
     grid,
     {
-      w: [101, 67, 33, 255],
-      i: [61, 43, 27, 255],
-      r: [200, 80, 70, 255],
-      y: [222, 184, 90, 255],
-      n: [90, 120, 160, 255],
-      x: [110, 150, 100, 255],
+      O: COLORS.outline,
+
+      D: COLORS.woodDark,
+      W: COLORS.wood,
+      L: COLORS.woodLight,
+      H: COLORS.woodHighlight,
+
+      I: [58, 44, 35, 255],
+
+      R: COLORS.red,
+      Y: COLORS.yellow,
+      B: COLORS.bookBlue,
+      G: COLORS.bookGreen,
+
+      Q: [236, 209, 165, 255],
     },
     "bookshelf"
   );
 }
 
+/**
+ * 観葉植物
+ *
+ * 葉を1つの大きい円ではなく、
+ * 複数枚に分けることでゲームらしくする。
+ */
 function generatePlant() {
-  const grid = createGrid(12, 16);
-  fillEllipse(grid, 6, 5, 5, 5, "l");
-  fillEllipse(grid, 4, 3, 2.5, 2.5, "d");
-  fillEllipse(grid, 8, 4, 2, 2, "d");
-  fillRect(grid, 3, 11, 6, 2, "p");
-  fillRect(grid, 4, 13, 4, 3, "p");
+  const grid = createGrid(20, 24);
+
+  // 影
+  fillEllipse(
+    grid,
+    10,
+    21,
+    6,
+    2,
+    "S"
+  );
+
+  // 茎
+  fillRect(grid, 9, 8, 2, 8, "D");
+
+  // 葉
+  fillEllipse(grid, 10, 6, 5, 4, "G");
+  fillEllipse(grid, 6, 7, 4, 4, "g");
+  fillEllipse(grid, 14, 8, 4, 4, "G");
+
+  fillEllipse(grid, 8, 3, 3, 3, "L");
+  fillEllipse(grid, 13, 4, 3, 3, "g");
+
+  fillEllipse(grid, 5, 11, 3, 3, "L");
+  fillEllipse(grid, 15, 12, 3, 3, "L");
+
+  // ハイライト
+  fillRect(grid, 7, 4, 2, 1, "H");
+  fillRect(grid, 12, 6, 2, 1, "H");
+
+  // 鉢アウトライン
+  fillRect(grid, 5, 15, 10, 7, "O");
+
+  // 鉢
+  fillRect(grid, 6, 16, 8, 5, "P");
+
+  // 鉢上部
+  fillRect(grid, 5, 15, 10, 2, "p");
+
+  // 鉢ハイライト
+  fillRect(grid, 7, 17, 2, 3, "Q");
+
   save(
     grid,
     {
-      l: [76, 165, 96, 255],
-      d: [52, 130, 74, 255],
-      p: [180, 120, 80, 255],
+      O: COLORS.outline,
+
+      D: COLORS.greenDark,
+
+      g: COLORS.green,
+      G: COLORS.greenLight,
+      L: COLORS.green,
+
+      H: [175, 216, 126, 255],
+
+      P: COLORS.pot,
+      p: COLORS.potLight,
+      Q: [232, 179, 125, 255],
+
+      S: [85, 77, 67, 120],
     },
     "plant"
   );
 }
 
+/**
+ * 受付カウンター
+ *
+ * 参考画像のように、
+ * 「RECEPTION」というプレートを置ける形にする。
+ */
 function generateReceptionDesk() {
-  const grid = createGrid(28, 16);
-  fillRect(grid, 0, 6, 28, 8, "d");
-  fillRect(grid, 0, 5, 28, 1, "H"); // countertop highlight
-  fillRect(grid, 2, 14, 3, 2, "g");
-  fillRect(grid, 23, 14, 3, 2, "g");
-  fillRect(grid, 11, 2, 6, 4, "s"); // small sign/plate
+  const grid = createGrid(36, 24);
+
+  // 影
+  fillRect(grid, 3, 21, 30, 2, "S");
+
+  // カウンター外枠
+  fillRect(grid, 1, 7, 34, 14, "O");
+
+  // 本体
+  fillRect(grid, 2, 8, 32, 12, "D");
+
+  // 上面
+  fillRect(grid, 3, 5, 30, 5, "L");
+
+  // 上面ハイライト
+  fillRect(grid, 4, 5, 28, 1, "H");
+
+  // 前面中央パネル
+  fillRect(grid, 7, 11, 22, 8, "W");
+
+  // パネル縁
+  fillRect(grid, 8, 12, 20, 1, "L");
+
+  // 看板
+  fillRect(grid, 10, 13, 16, 4, "B");
+  fillRect(grid, 11, 14, 14, 2, "b");
+
+  // 看板に文字っぽいドット
+  fillRect(grid, 12, 14, 1, 1, "Q");
+  fillRect(grid, 14, 14, 2, 1, "Q");
+  fillRect(grid, 17, 14, 1, 1, "Q");
+  fillRect(grid, 19, 14, 2, 1, "Q");
+  fillRect(grid, 22, 14, 2, 1, "Q");
+
+  // 左右の柱
+  fillRect(grid, 2, 17, 5, 4, "d");
+  fillRect(grid, 29, 17, 5, 4, "d");
+
+  // 卓上の呼び鈴
+  fillRect(grid, 28, 3, 3, 2, "M");
+  fillRect(grid, 29, 2, 1, 1, "m");
+
   save(
     grid,
     {
-      d: [30, 58, 95, 255],
-      H: [64, 100, 148, 255],
-      g: [20, 38, 63, 255],
-      s: [226, 232, 240, 255],
+      O: COLORS.outline,
+
+      D: COLORS.woodDark,
+      d: [78, 50, 33, 255],
+
+      W: COLORS.wood,
+      L: COLORS.woodLight,
+      H: COLORS.woodHighlight,
+
+      B: COLORS.darkBlue,
+      b: COLORS.blue,
+
+      Q: COLORS.white,
+
+      M: COLORS.metal,
+      m: COLORS.metalLight,
+
+      S: [79, 68, 58, 120],
     },
     "reception"
   );
 }
 
+/**
+ * サーバーラック
+ *
+ * より本物のラックらしく、
+ * 複数ユニット・LED・通気口を追加。
+ */
 function generateServerRack() {
-  const grid = createGrid(14, 22, "b");
-  for (let y = 2; y < 20; y += 3) {
-    fillRect(grid, 2, y, 2, 1, "g");
-    fillRect(grid, 5, y, 2, 1, "a");
-    fillRect(grid, 10, y, 2, 1, "g");
+  const grid = createGrid(20, 30);
+
+  // 影
+  fillRect(grid, 3, 28, 14, 2, "S");
+
+  // 外枠
+  fillRect(grid, 2, 1, 16, 28, "O");
+
+  // 本体
+  fillRect(grid, 3, 2, 14, 26, "D");
+
+  // 左ハイライト
+  fillRect(grid, 3, 2, 1, 25, "L");
+
+  // 上部パネル
+  fillRect(grid, 5, 4, 10, 3, "M");
+
+  // サーバーユニット
+  for (let y = 8; y <= 23; y += 4) {
+    fillRect(grid, 5, y, 10, 3, "M");
+
+    // パネル上ハイライト
+    fillRect(grid, 6, y, 8, 1, "m");
+
+    // LED
+    fillRect(grid, 6, y + 1, 1, 1, "G");
+    fillRect(grid, 8, y + 1, 1, 1, "Y");
+
+    // 通気口
+    fillRect(grid, 11, y + 1, 3, 1, "V");
   }
+
+  // 下部吸気口
+  fillRect(grid, 5, 25, 10, 2, "V");
+
   save(
     grid,
     {
-      b: [40, 48, 58, 255],
-      g: [74, 222, 128, 255],
-      a: [251, 191, 36, 255],
+      O: [30, 34, 38, 255],
+
+      D: COLORS.metalDark,
+      L: COLORS.metalLight,
+
+      M: [58, 68, 77, 255],
+      m: [103, 114, 121, 255],
+
+      G: [81, 211, 117, 255],
+      Y: [232, 184, 68, 255],
+
+      V: [32, 39, 43, 255],
+
+      S: [60, 55, 51, 120],
     },
     "server"
+  );
+}
+
+/**
+ * ホワイトボード
+ *
+ * PLAN / RESEARCHなどの部屋に配置。
+ */
+function generateWhiteboard() {
+  const grid = createGrid(28, 22);
+
+  // 脚
+  fillRect(grid, 4, 16, 2, 6, "D");
+  fillRect(grid, 22, 16, 2, 6, "D");
+
+  // 外枠
+  fillRect(grid, 2, 2, 24, 16, "O");
+
+  // フレーム
+  fillRect(grid, 3, 3, 22, 14, "F");
+
+  // 白板
+  fillRect(grid, 4, 4, 20, 12, "W");
+
+  // 図っぽいライン
+  fillRect(grid, 6, 7, 7, 1, "B");
+  fillRect(grid, 8, 10, 10, 1, "R");
+
+  fillRect(grid, 15, 6, 1, 6, "G");
+
+  // ノード
+  fillRect(grid, 6, 12, 3, 2, "Y");
+  fillRect(grid, 17, 12, 3, 2, "B");
+
+  save(
+    grid,
+    {
+      O: COLORS.outline,
+
+      F: COLORS.metal,
+      D: COLORS.metalDark,
+
+      W: COLORS.white,
+
+      B: COLORS.bookBlue,
+      R: COLORS.red,
+      G: COLORS.bookGreen,
+      Y: COLORS.yellow,
+    },
+    "whiteboard"
+  );
+}
+
+/**
+ * 小型キャビネット。
+ *
+ * 机だけが並ぶ単調なオフィスにならないようにする。
+ */
+function generateCabinet() {
+  const grid = createGrid(18, 20);
+
+  // 外枠
+  fillRect(grid, 2, 2, 14, 17, "O");
+
+  // 本体
+  fillRect(grid, 3, 3, 12, 15, "D");
+
+  // 上面
+  fillRect(grid, 4, 1, 10, 3, "L");
+
+  // 引き出し
+  for (const y of [5, 9, 13]) {
+    fillRect(grid, 4, y, 10, 3, "W");
+    fillRect(grid, 5, y, 8, 1, "H");
+
+    // 取手
+    fillRect(grid, 8, y + 1, 2, 1, "M");
+  }
+
+  save(
+    grid,
+    {
+      O: COLORS.outline,
+
+      D: COLORS.woodDark,
+      W: COLORS.wood,
+      L: COLORS.woodLight,
+      H: COLORS.woodHighlight,
+
+      M: COLORS.metalDark,
+    },
+    "cabinet"
   );
 }
 
@@ -117,5 +586,33 @@ export function generateFurniture() {
   generatePlant();
   generateReceptionDesk();
   generateServerRack();
-  console.log("Generated furniture props: desk, bookshelf, plant, reception, server");
+
+  // オフィスの密度を上げる追加家具
+  generateWhiteboard();
+  generateCabinet();
+
+  console.log(`
+Generated furniture props:
+
+- prop_desk.png
+  モニター・キーボード・マグカップ付きデスク
+
+- prop_bookshelf.png
+  木製の大型本棚
+
+- prop_plant.png
+  観葉植物
+
+- prop_reception.png
+  ゲーム会社風受付カウンター
+
+- prop_server.png
+  LED付きサーバーラック
+
+- prop_whiteboard.png
+  設計・計画エリア用ホワイトボード
+
+- prop_cabinet.png
+  オフィス用キャビネット
+`);
 }
