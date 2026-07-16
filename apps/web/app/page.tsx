@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** docs/17_MVP_PLAN.md #1: the MVP has no dashboard yet, so the app opens straight into the office. */
+/** docs/08_SCREEN_DESIGN.md #0: Dashboard is the app's entry point. */
 export default function RootPage() {
-  redirect("/office");
+  redirect("/dashboard");
 }

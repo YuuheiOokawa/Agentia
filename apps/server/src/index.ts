@@ -3,8 +3,12 @@ import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { env } from "./config/env.js";
 import { SessionManager } from "./core/session-manager.js";
+import { ProjectRegistry, ensureDataDir } from "./persistence/project-registry.js";
 import { registerInternalEventsRoute } from "./routes/internal-events.js";
 import { registerConnectionRoutes } from "./routes/connection.js";
+import { registerProjectRoutes } from "./routes/projects.js";
+import { registerSessionRoutes } from "./routes/sessions.js";
+import { registerStatsRoute } from "./routes/stats.js";
 import { registerWebSocketHub } from "./ws/hub.js";
 
 async function start(): Promise<void> {
@@ -13,17 +17,26 @@ async function start(): Promise<void> {
   await fastify.register(cors, { origin: true });
   await fastify.register(websocket);
 
-  const sessionManager = new SessionManager({
-    logDir: env.logDir,
-    ringBufferMaxEvents: env.ringBufferMaxEvents,
-    dedupeCacheMaxEntries: env.dedupeCacheMaxEntries,
-    inactiveAgentTimeoutMs: env.inactiveAgentTimeoutMs,
-    offlineDetectionTimeoutMs: env.offlineDetectionTimeoutMs,
-  });
+  ensureDataDir(env.dataDir);
+  const projectRegistry = new ProjectRegistry(env.dataDir);
+
+  const sessionManager = new SessionManager(
+    {
+      logDir: env.logDir,
+      ringBufferMaxEvents: env.ringBufferMaxEvents,
+      dedupeCacheMaxEntries: env.dedupeCacheMaxEntries,
+      inactiveAgentTimeoutMs: env.inactiveAgentTimeoutMs,
+      offlineDetectionTimeoutMs: env.offlineDetectionTimeoutMs,
+    },
+    projectRegistry
+  );
   sessionManager.start();
 
   registerInternalEventsRoute(fastify, sessionManager);
-  registerConnectionRoutes(fastify, sessionManager);
+  registerConnectionRoutes(fastify, sessionManager, projectRegistry);
+  registerProjectRoutes(fastify, projectRegistry);
+  registerSessionRoutes(fastify);
+  registerStatsRoute(fastify);
   registerWebSocketHub(fastify, sessionManager);
 
   fastify.get("/healthz", async () => ({ ok: true }));

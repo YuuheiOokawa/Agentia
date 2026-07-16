@@ -9,12 +9,12 @@
 | Phase 3 | PostgreSQL+Prisma導入、セッション履歴・統計の永続化、GitHub連携(Webhook受信・可視化)、OTel連携によるトークン/コスト表示 |
 | Phase 4 | ゲーム要素(会社経験値・レベル・オフィス拡張)、実績システム |
 
-## 2. Phase 2 詳細
+## 2. Phase 2 詳細(実装済み)
 
 - Sub Agent相関(`SubagentStart`/`SubagentStop`、`agent_id`)を実装し、`09_CHARACTER_SYSTEM.md`の動的役職判定を有効化。
-- オフィスエリアを12種へ拡張(会議室、個人デスクの分離、デプロイエリア、サーバールーム、GitHub連携スペース、PM スペース等、`10_OFFICE_SYSTEM.md`参照)。
-- ダッシュボード/セッション履歴/プロジェクト一覧/プロジェクト詳細/統計画面を実装(`08_SCREEN_DESIGN.md`)。ただし永続化はまだJSONLベースの簡易集計。
-- プロジェクト切替UI・マルチプロジェクトのWebSocketチャンネル分離。
+- オフィスエリアを12種へ拡張(会議室、個人デスクの分離、デプロイエリア、サーバールーム、GitHub連携スペース、PM スペース等、`10_OFFICE_SYSTEM.md`参照)。カイロソフト風の実ドット絵アセット(`tools/pixel-art/`生成)で床・壁・什器・キャラクターを描画するよう刷新済み(`07_UI_UX_DESIGN.md` 2.1節)。
+- ダッシュボード/セッション履歴(一覧・詳細)/プロジェクト一覧・詳細/統計画面を実装(`08_SCREEN_DESIGN.md`)。永続化はまだJSONLベースの簡易集計(`apps/server/src/persistence/session-history.ts`が`~/.agentia/logs/*.jsonl`を都度スキャン)。
+- プロジェクト切替UI(`ProjectSwitcher`)と、サーバー再起動をまたいで永続化するプロジェクトレジストリ(`apps/server/src/persistence/project-registry.ts`、`~/.agentia/data/projects.json`)を実装。WebSocket自体は`projectId`単位のブロードキャストのまま(接続自体は`AppShell`が画面横断で1本を共有)。
 
 ## 3. Phase 3 詳細
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { SessionManager } from "../core/session-manager.js";
+import type { ProjectRegistry } from "../persistence/project-registry.js";
 import { env } from "../config/env.js";
 
 const HOOK_COMMAND = "agentia-hook";
@@ -63,7 +64,11 @@ function hooksConfigured(settings: ClaudeSettings): boolean {
 const SetupBodySchema = z.object({ projectRoot: z.string() });
 const StatusQuerySchema = z.object({ projectRoot: z.string().optional() });
 
-export function registerConnectionRoutes(fastify: FastifyInstance, sessionManager: SessionManager): void {
+export function registerConnectionRoutes(
+  fastify: FastifyInstance,
+  sessionManager: SessionManager,
+  projectRegistry: ProjectRegistry
+): void {
   fastify.get("/api/connection/status", async (request, reply) => {
     const query = StatusQuerySchema.safeParse(request.query);
     const projectRoot = query.success ? query.data.projectRoot : undefined;
@@ -103,7 +108,8 @@ export function registerConnectionRoutes(fastify: FastifyInstance, sessionManage
     if (changed) {
       await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
     }
-    return reply.send({ changed, settingsPath });
+    const project = projectRegistry.ensureRegistered(parsed.data.projectRoot);
+    return reply.send({ changed, settingsPath, projectId: project.projectId });
   });
 
   fastify.post("/api/connection/test", async (_request, reply) => {

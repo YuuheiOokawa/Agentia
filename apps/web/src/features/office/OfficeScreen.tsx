@@ -1,32 +1,28 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ActivityLogList } from "@/components/ActivityLogList";
 import { CurrentTaskCards } from "@/components/CurrentTaskCards";
-import { useOfficeSocket } from "@/hooks/use-office-socket";
-import { useMovementTicker } from "@/hooks/use-movement-ticker";
 import { useOfficeStore } from "@/stores/office-store";
-import { resolveProjectId } from "@/lib/project";
-import { DEFAULT_PROJECT_ROOT_STORAGE_KEY } from "@/lib/constants";
+import { useProjectStore } from "@/stores/project-store";
 
 // PixiJS's <Stage> needs a real canvas/WebGL context, so it must never run during SSR.
 const OfficeCanvas = dynamic(() => import("./canvas/OfficeCanvas").then((m) => m.OfficeCanvas), { ssr: false });
 
 export function OfficeScreen() {
-  const [projectRoot, setProjectRoot] = useState<string | null>(null);
-
-  useEffect(() => {
-    setProjectRoot(window.localStorage.getItem(DEFAULT_PROJECT_ROOT_STORAGE_KEY) ?? "");
-  }, []);
-
-  const projectId = resolveProjectId(projectRoot ?? "");
-  useOfficeSocket(projectId);
-  useMovementTicker();
+  // AppShell owns the WebSocket connection + project hydration (shared across every screen);
+  // this component only needs to know whether that hydration has completed yet.
+  const projectRoot = useProjectStore((s) => s.projectRoot);
   const claudeCodeOffline = useOfficeStore((s) => s.claudeCodeOffline);
 
-  if (projectRoot === null) return null;
+  if (projectRoot === null) {
+    return (
+      <AppShell>
+        <div style={{ padding: "1.5rem" }} />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

@@ -1,5 +1,4 @@
 import { EventEmitter } from "node:events";
-import { basename } from "node:path";
 import type { Employee, IngestRequest, InternalEvent } from "@agentia/shared-types";
 import { SessionCorrelator } from "./correlator.js";
 import { DedupeCache } from "./dedupe-cache.js";
@@ -7,6 +6,7 @@ import { applyEventToEmployee } from "./employee-tracker.js";
 import { buildAgentSpawnEvent, buildAgentStopEvent, buildOfflineEvent, normalize } from "./normalizer.js";
 import { SessionRingBuffer } from "../persistence/ring-buffer.js";
 import { JsonlWriter } from "../persistence/jsonl-writer.js";
+import type { ProjectRegistry } from "../persistence/project-registry.js";
 
 interface SessionRuntime {
   sessionId: string;
@@ -33,14 +33,16 @@ export interface SessionManagerOptions {
  */
 export class SessionManager extends EventEmitter {
   private readonly sessions = new Map<string, SessionRuntime>();
-  private readonly projectIdByRoot = new Map<string, string>();
   private readonly dedupeCache: DedupeCache;
   private readonly ringBuffer: SessionRingBuffer;
   private readonly jsonlWriter: JsonlWriter;
   private readonly clock: () => number;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly options: SessionManagerOptions) {
+  constructor(
+    private readonly options: SessionManagerOptions,
+    private readonly projectRegistry: ProjectRegistry
+  ) {
     super();
     this.dedupeCache = new DedupeCache(options.dedupeCacheMaxEntries);
     this.ringBuffer = new SessionRingBuffer(options.ringBufferMaxEvents);
@@ -63,12 +65,7 @@ export class SessionManager extends EventEmitter {
   }
 
   private resolveProjectId(cwd: string): string {
-    let projectId = this.projectIdByRoot.get(cwd);
-    if (!projectId) {
-      projectId = `proj_${basename(cwd) || "default"}`;
-      this.projectIdByRoot.set(cwd, projectId);
-    }
-    return projectId;
+    return this.projectRegistry.resolveByRoot(cwd).projectId;
   }
 
   private getOrCreateSession(sessionId: string, projectId: string): SessionRuntime {

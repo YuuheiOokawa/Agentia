@@ -86,6 +86,7 @@ async function main() {
   ]);
 
   await post("Stop", {});
+  await post("SessionEnd", {});
   console.log("[demo] done");
 }
 
