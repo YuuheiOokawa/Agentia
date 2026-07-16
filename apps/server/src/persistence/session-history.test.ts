@@ -1,56 +1,60 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { InternalEvent } from "@agentia/shared-types";
+import { prisma, type Prisma } from "@agentia/db";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { scanAllSessions, scanSession } from "./session-history.js";
 
-function event(overrides: Partial<InternalEvent>): InternalEvent {
-  return {
-    eventSchemaVersion: "1.0",
-    eventId: "e1",
-    eventSource: "claude_code",
-    projectId: "proj_x",
-    sessionId: "session_1",
-    agentId: "agent_main",
-    agentType: "main",
-    parentAgentId: null,
-    displayName: "Claude (Main)",
-    eventType: "tool_use",
-    toolName: null,
-    status: "running",
-    target: null,
-    message: "",
-    timestamp: "2026-07-16T10:00:00.000Z",
-    seq: 1,
-    ...overrides,
-  };
+async function seedProject(id: string): Promise<void> {
+  await prisma.project.create({ data: { id, name: id, rootPath: `/tmp/${id}` } });
 }
 
-describe("session-history", () => {
-  let dir: string;
+async function seedEvent(overrides: Partial<Prisma.EventUncheckedCreateInput>): Promise<void> {
+  await prisma.event.create({
+    data: {
+      id: `evt_${Math.random().toString(36).slice(2)}`,
+      sessionId: "session_1",
+      agentId: "agent_main",
+      agentType: "main",
+      parentAgentId: null,
+      displayName: "Claude (Main)",
+      eventType: "tool_use",
+      toolName: null,
+      status: "running",
+      target: null,
+      message: "",
+      timestamp: new Date("2026-07-16T10:00:00.000Z"),
+      seq: 1,
+      ...overrides,
+    },
+  });
+}
 
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "agentia-test-"));
+describe("session-history (Prisma)", () => {
+  beforeAll(async () => {
+    await prisma.$connect();
   });
 
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+  afterEach(async () => {
+    await prisma.event.deleteMany();
+    await prisma.agent.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.project.deleteMany();
   });
 
-  it("summarizes edit/read/bash/test counts and subAgentCount from a JSONL log", () => {
-    const events: InternalEvent[] = [
-      event({ eventType: "session_start", seq: 1, timestamp: "2026-07-16T10:00:00.000Z" }),
-      event({ eventType: "tool_result", toolName: "Edit", status: "success", seq: 2 }),
-      event({ eventType: "tool_result", toolName: "Read", status: "success", seq: 3 }),
-      event({ eventType: "tool_result", toolName: "Bash", target: "npm test", status: "success", seq: 4 }),
-      event({ eventType: "tool_error", toolName: "Bash", target: "npm test", status: "error", seq: 5 }),
-      event({ agentId: "agent_sub1", eventType: "agent_spawn", seq: 6 }),
-      event({ eventType: "session_end", seq: 7, timestamp: "2026-07-16T10:05:00.000Z" }),
-    ];
-    writeFileSync(join(dir, "session_1.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
 
-    const found = scanSession(dir, "session_1");
+  it("summarizes edit/read/bash/test counts and subAgentCount for a session", async () => {
+    await seedProject("proj_x");
+    await prisma.session.create({
+      data: { id: "session_1", projectId: "proj_x", startedAt: new Date("2026-07-16T10:00:00.000Z"), endedAt: new Date("2026-07-16T10:05:00.000Z") },
+    });
+    await seedEvent({ eventType: "tool_result", toolName: "Edit", status: "success", seq: 2 });
+    await seedEvent({ eventType: "tool_result", toolName: "Read", status: "success", seq: 3 });
+    await seedEvent({ eventType: "tool_result", toolName: "Bash", target: "npm test", status: "success", seq: 4 });
+    await seedEvent({ eventType: "tool_error", toolName: "Bash", target: "npm test", status: "error", seq: 5 });
+    await seedEvent({ agentId: "agent_sub1", eventType: "agent_spawn", seq: 6 });
+
+    const found = await scanSession("session_1");
     expect(found?.summary.editCount).toBe(1);
     expect(found?.summary.readCount).toBe(1);
     expect(found?.summary.bashCount).toBe(2);
@@ -61,21 +65,17 @@ describe("session-history", () => {
     expect(found?.summary.endedAt).toBe("2026-07-16T10:05:00.000Z");
   });
 
-  it("scans every jsonl file in the log directory", () => {
-    writeFileSync(join(dir, "session_a.jsonl"), JSON.stringify(event({ sessionId: "session_a" })) + "\n");
-    writeFileSync(join(dir, "session_b.jsonl"), JSON.stringify(event({ sessionId: "session_b" })) + "\n");
+  it("scans every session, optionally filtered by project", async () => {
+    await seedProject("proj_a");
+    await seedProject("proj_b");
+    await prisma.session.create({ data: { id: "session_a", projectId: "proj_a", startedAt: new Date() } });
+    await prisma.session.create({ data: { id: "session_b", projectId: "proj_b", startedAt: new Date() } });
 
-    const summaries = scanAllSessions(dir);
-    expect(summaries.map((s) => s.sessionId).sort()).toEqual(["session_a", "session_b"]);
+    expect((await scanAllSessions()).map((s) => s.sessionId).sort()).toEqual(["session_a", "session_b"]);
+    expect((await scanAllSessions("proj_a")).map((s) => s.sessionId)).toEqual(["session_a"]);
   });
 
-  it("returns an empty array when the log directory doesn't exist", () => {
-    expect(scanAllSessions(join(dir, "missing"))).toEqual([]);
-  });
-
-  it("skips corrupted lines instead of throwing", () => {
-    writeFileSync(join(dir, "session_c.jsonl"), `not json\n${JSON.stringify(event({ sessionId: "session_c" }))}\n`);
-    const found = scanSession(dir, "session_c");
-    expect(found?.summary.eventCount).toBe(1);
+  it("returns null for an unknown session", async () => {
+    expect(await scanSession("does_not_exist")).toBeNull();
   });
 });

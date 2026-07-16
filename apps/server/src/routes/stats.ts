@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { scanAllSessions } from "../persistence/session-history.js";
-import { env } from "../config/env.js";
 
 const RANGE_MS: Record<string, number> = {
   day: 24 * 60 * 60 * 1000,
@@ -19,8 +18,8 @@ export function registerStatsRoute(fastify: FastifyInstance): void {
     const windowMs = RANGE_MS[range] ?? RANGE_MS["week"]!;
     const cutoff = Date.now() - windowMs;
 
-    let sessions = scanAllSessions(env.logDir).filter((s) => Date.parse(s.startedAt) >= cutoff);
-    if (request.query.projectId) sessions = sessions.filter((s) => s.projectId === request.query.projectId);
+    const allSessions = await scanAllSessions(request.query.projectId);
+    const sessions = allSessions.filter((s) => Date.parse(s.startedAt) >= cutoff);
 
     const dailyMinutes = new Map<string, number>();
     let editCount = 0;

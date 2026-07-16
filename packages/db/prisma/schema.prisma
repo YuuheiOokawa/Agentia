@@ -1,0 +1,119 @@
+// docs/11_DATABASE_DESIGN.md #3 ER diagram, implemented for Phase 3.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id            String   @id
+  name          String
+  rootPath      String   @unique
+  defaultBranch String?
+  /// "owner/repo", set once GitHub linkage (docs/13 GitHub連携) is configured.
+  githubRepo    String?
+  createdAt     DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+
+  sessions     Session[]
+  githubEvents GithubEvent[]
+  companyState CompanyState?
+}
+
+model Session {
+  /// Claude Code's own session_id (docs/04_CLAUDE_CODE_INTEGRATION.md #4), used verbatim as the PK.
+  id        String    @id
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id])
+  branch    String?
+  startedAt DateTime
+  endedAt   DateTime?
+
+  editCount        Int @default(0)
+  readCount        Int @default(0)
+  bashCount        Int @default(0)
+  testCount        Int @default(0)
+  testSuccessCount Int @default(0)
+  testFailureCount Int @default(0)
+  subAgentCount    Int @default(0)
+
+  /// Phase 3 OTel token/cost aggregates (docs/04 #3: only available via Agent SDK usage or OTel, not hooks).
+  inputTokens  Int   @default(0)
+  outputTokens Int   @default(0)
+  costUsd      Float @default(0)
+
+  agents       Agent[]
+  events       Event[]
+  githubEvents GithubEvent[]
+
+  @@index([projectId, startedAt])
+}
+
+model Agent {
+  id            String    @id @default(cuid())
+  sessionId     String
+  session       Session   @relation(fields: [sessionId], references: [id])
+  /// Our internal agentId (e.g. "agent_main", "agent_sub1-abc123"), unique within a session only.
+  internalId    String
+  parentAgentId String?
+  agentType     String
+  displayName   String
+  spawnedAt     DateTime
+  completedAt   DateTime?
+
+  @@unique([sessionId, internalId])
+  @@index([sessionId])
+}
+
+model Event {
+  /// The normalizer's generated eventId (docs/05_EVENT_DESIGN.md #1), used verbatim as the PK.
+  id            String   @id
+  sessionId     String
+  session       Session  @relation(fields: [sessionId], references: [id])
+  agentId       String
+  agentType     String
+  parentAgentId String?
+  displayName   String
+  eventType     String
+  toolName      String?
+  status        String
+  target        String?
+  message       String
+  timestamp     DateTime
+  seq           Int
+
+  @@index([sessionId, seq])
+  @@index([agentId, timestamp])
+}
+
+model GithubEvent {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  sessionId      String?
+  session        Session? @relation(fields: [sessionId], references: [id])
+  repo           String
+  /// "push" | "pull_request" | "issues" | "pull_request_review"
+  type           String
+  /// GitHub's own action field, e.g. "opened" | "closed" | "merged" | "synchronize"
+  action         String?
+  actor          String?
+  url            String?
+  payloadSummary String
+  createdAt      DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+/// Phase 4 placeholder (docs/18_ROADMAP.md #4) - unused until the game-element phase, created now
+/// so the schema doesn't need another migration when that phase starts.
+model CompanyState {
+  projectId        String   @id
+  project          Project  @relation(fields: [projectId], references: [id])
+  level            Int      @default(1)
+  experiencePoints Int      @default(0)
+  unlockedFeatures Json     @default("[]")
+}

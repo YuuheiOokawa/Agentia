@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@agentia/db": "*",
     "@agentia/shared-types": "*",
     "@fastify/cors": "^10.0.1",
     "@fastify/websocket": "^11.0.1",

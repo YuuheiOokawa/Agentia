@@ -1,7 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { prisma, type Event as EventRow, type Session as SessionRow } from "@agentia/db";
 import { classifyTool } from "@agentia/shared-types";
-import type { InternalEvent } from "@agentia/shared-types";
 
 export interface SessionSummary {
   sessionId: string;
@@ -26,14 +24,13 @@ function isTestCommand(target: string | null): boolean {
   return classifyTool("Bash", { command: target }).state === "testing";
 }
 
-/** Reads one session's JSONL log and reduces it into a summary (docs/11_DATABASE_DESIGN.md #1: no DB yet). */
-function summarize(sessionId: string, events: InternalEvent[]): SessionSummary | null {
-  if (events.length === 0) return null;
+/** Reduces one session's Postgres event rows into a summary (docs/11_DATABASE_DESIGN.md #1, Phase 3). */
+function summarize(session: SessionRow, events: EventRow[]): SessionSummary {
   const summary: SessionSummary = {
-    sessionId,
-    projectId: events[0]!.projectId,
-    startedAt: events[0]!.timestamp,
-    endedAt: null,
+    sessionId: session.id,
+    projectId: session.projectId,
+    startedAt: session.startedAt.toISOString(),
+    endedAt: session.endedAt?.toISOString() ?? null,
     eventCount: events.length,
     editCount: 0,
     readCount: 0,
@@ -45,7 +42,6 @@ function summarize(sessionId: string, events: InternalEvent[]): SessionSummary |
   };
 
   for (const event of events) {
-    if (event.eventType === "session_end") summary.endedAt = event.timestamp;
     if (event.eventType === "agent_spawn") summary.subAgentCount += 1;
 
     if (event.eventType === "tool_result" || event.eventType === "tool_error") {
@@ -65,45 +61,20 @@ function summarize(sessionId: string, events: InternalEvent[]): SessionSummary |
   return summary;
 }
 
-function parseJsonl(filePath: string): InternalEvent[] {
-  const raw = readFileSync(filePath, "utf8");
-  const events: InternalEvent[] = [];
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      events.push(JSON.parse(line) as InternalEvent);
-    } catch {
-      // Skip a corrupted line rather than failing the whole scan.
-    }
-  }
-  return events;
+export async function scanAllSessions(projectId?: string): Promise<SessionSummary[]> {
+  const sessions = await prisma.session.findMany({
+    where: projectId ? { projectId } : undefined,
+    include: { events: true },
+    orderBy: { startedAt: "desc" },
+  });
+  return sessions.map((session) => summarize(session, session.events));
 }
 
-/** Scans every `${sessionId}.jsonl` file under logDir and summarizes it. */
-export function scanAllSessions(logDir: string): SessionSummary[] {
-  let files: string[];
-  try {
-    files = readdirSync(logDir).filter((f) => f.endsWith(".jsonl"));
-  } catch {
-    return [];
-  }
-
-  const summaries: SessionSummary[] = [];
-  for (const file of files) {
-    const sessionId = file.slice(0, -".jsonl".length);
-    const events = parseJsonl(join(logDir, file));
-    const summary = summarize(sessionId, events);
-    if (summary) summaries.push(summary);
-  }
-  return summaries.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-}
-
-export function scanSession(logDir: string, sessionId: string): { summary: SessionSummary; events: InternalEvent[] } | null {
-  try {
-    const events = parseJsonl(join(logDir, `${sessionId}.jsonl`));
-    const summary = summarize(sessionId, events);
-    return summary ? { summary, events } : null;
-  } catch {
-    return null;
-  }
+export async function scanSession(sessionId: string): Promise<{ summary: SessionSummary; events: EventRow[] } | null> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { events: { orderBy: { seq: "asc" } } },
+  });
+  if (!session) return null;
+  return { summary: summarize(session, session.events), events: session.events };
 }

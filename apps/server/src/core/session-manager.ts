@@ -7,6 +7,7 @@ import { buildAgentSpawnEvent, buildAgentStopEvent, buildOfflineEvent, normalize
 import { SessionRingBuffer } from "../persistence/ring-buffer.js";
 import { JsonlWriter } from "../persistence/jsonl-writer.js";
 import type { ProjectRegistry } from "../persistence/project-registry.js";
+import { markSessionEnded, persistAgentCompleted, persistAgentSpawned, persistEvent, upsertSession } from "../persistence/db-writer.js";
 
 interface SessionRuntime {
   sessionId: string;
@@ -16,6 +17,8 @@ interface SessionRuntime {
   lastEventAtMs: number;
   offlineNotified: boolean;
   employees: Map<string, Employee>;
+  /** Resolves once the Postgres Session row exists; Event/Agent writes chain off this (FK ordering). */
+  dbReady: Promise<void>;
 }
 
 export interface SessionManagerOptions {
@@ -71,6 +74,7 @@ export class SessionManager extends EventEmitter {
   private getOrCreateSession(sessionId: string, projectId: string): SessionRuntime {
     let runtime = this.sessions.get(sessionId);
     if (!runtime) {
+      const startedAt = new Date(this.clock());
       runtime = {
         sessionId,
         projectId,
@@ -79,6 +83,7 @@ export class SessionManager extends EventEmitter {
         lastEventAtMs: this.clock(),
         offlineNotified: false,
         employees: new Map(),
+        dbReady: upsertSession(sessionId, projectId, startedAt),
       };
       this.sessions.set(sessionId, runtime);
     }
@@ -90,6 +95,25 @@ export class SessionManager extends EventEmitter {
     const finalEvent: InternalEvent = { ...event, seq: runtime.seq };
     this.ringBuffer.push(runtime.sessionId, finalEvent);
     void this.jsonlWriter.append(runtime.sessionId, finalEvent);
+    void runtime.dbReady.then(() => persistEvent(finalEvent));
+    if (finalEvent.eventType === "session_end") {
+      void runtime.dbReady.then(() => markSessionEnded(runtime.sessionId, new Date(finalEvent.timestamp)));
+    }
+    if (finalEvent.eventType === "agent_spawn") {
+      void runtime.dbReady.then(() =>
+        persistAgentSpawned({
+          sessionId: runtime.sessionId,
+          internalId: finalEvent.agentId,
+          parentAgentId: finalEvent.parentAgentId,
+          agentType: finalEvent.agentType,
+          displayName: finalEvent.displayName,
+          spawnedAt: new Date(finalEvent.timestamp),
+        })
+      );
+    }
+    if (finalEvent.eventType === "agent_stop") {
+      void runtime.dbReady.then(() => persistAgentCompleted(runtime.sessionId, finalEvent.agentId, new Date(finalEvent.timestamp)));
+    }
 
     const current = runtime.employees.get(finalEvent.agentId) ?? null;
     const updated = applyEventToEmployee(current, finalEvent, rawToolInput);

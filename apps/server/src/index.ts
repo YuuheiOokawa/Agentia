@@ -18,7 +18,8 @@ async function start(): Promise<void> {
   await fastify.register(websocket);
 
   ensureDataDir(env.dataDir);
-  const projectRegistry = new ProjectRegistry(env.dataDir);
+  const projectRegistry = new ProjectRegistry();
+  await projectRegistry.init();
 
   const sessionManager = new SessionManager(
     {

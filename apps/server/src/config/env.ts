@@ -10,4 +10,6 @@ export const env = {
   offlineDetectionTimeoutMs: 30_000,
   ringBufferMaxEvents: 2000,
   dedupeCacheMaxEntries: 10_000,
+  /** Phase 3 (docs/18_ROADMAP.md #3): GitHub webhook signature verification secret. */
+  githubWebhookSecret: process.env["AGENTIA_GITHUB_WEBHOOK_SECRET"] ?? null,
 } as const;
