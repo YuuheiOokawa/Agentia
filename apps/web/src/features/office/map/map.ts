@@ -45,7 +45,7 @@ export const AREA_LAYOUT_BY_ID: ReadonlyMap<AreaId, AreaLayout> = new Map(
   PHASE2_AREA_LAYOUT.map((area) => [area.areaId, area])
 );
 
-export type FurnitureProp = "desk" | "bookshelf" | "plant" | "server" | "reception";
+export type FurnitureProp = "desk" | "bookshelf" | "plant" | "server" | "reception" | "whiteboard" | "cabinet";
 
 /** Which pixel-art prop decorates each area's desk slots (docs/10 #2 area definitions). */
 export const AREA_FURNITURE: Record<AreaId, FurnitureProp> = {
@@ -61,6 +61,17 @@ export const AREA_FURNITURE: Record<AreaId, FurnitureProp> = {
   deploy_area: "desk",
   github_hub: "reception",
   break_room: "plant",
+};
+
+/**
+ * A single extra decorative prop per area, rendered once in a room corner (not per desk-slot),
+ * so rooms read as a real furnished office instead of identical desk rows (docs/07 "会社みたいに").
+ */
+export const AREA_ACCESSORY: Partial<Record<AreaId, FurnitureProp>> = {
+  meeting_room: "whiteboard",
+  pm_space: "whiteboard",
+  personal_desk: "cabinet",
+  library: "cabinet",
 };
 
 const CORRIDOR_X = OFFICE_WIDTH / 2;

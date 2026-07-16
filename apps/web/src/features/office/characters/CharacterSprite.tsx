@@ -16,8 +16,10 @@ const WANDER_MIN_DELAY_MS = 2200;
 const WANDER_MAX_DELAY_MS = 5200;
 const WANDER_RADIUS_PX = 22;
 
-/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x (docs: real bitmap assets, not vector shapes). */
-const SPRITE_SCALE = 0.34;
+/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x (docs: real bitmap assets, not vector shapes).
+ * 0.272 (not 0.34) keeps the on-screen footprint the same as the old 16x20@6x sprites (120*0.272 == 96*0.34),
+ * since the larger source art is meant to add detail, not make characters bigger relative to desks/rooms. */
+const SPRITE_SCALE = 0.272;
 
 const ICON_STYLE = new TextStyle({ fontSize: 13 });
 const NAME_STYLE = new TextStyle({ fontSize: 11, fill: 0x1a1d23, fontWeight: "600" });

@@ -52,4 +52,6 @@ export const FURNITURE_TEXTURES: Record<FurnitureProp, Texture> = {
   plant: Texture.from(`${SPRITE_BASE}/prop_plant.png`),
   server: Texture.from(`${SPRITE_BASE}/prop_server.png`),
   reception: Texture.from(`${SPRITE_BASE}/prop_reception.png`),
+  whiteboard: Texture.from(`${SPRITE_BASE}/prop_whiteboard.png`),
+  cabinet: Texture.from(`${SPRITE_BASE}/prop_cabinet.png`),
 };

@@ -4,7 +4,7 @@ import { Stage, Container, Sprite, TilingSprite, Text } from "@pixi/react";
 import { TextStyle } from "pixi.js";
 import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
-import { AREA_FURNITURE, areaSlots, OFFICE_HEIGHT, OFFICE_WIDTH, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
+import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, OFFICE_HEIGHT, OFFICE_WIDTH, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
 import { CharacterSprite } from "../characters/CharacterSprite";
 import { FLOOR_TEXTURE, FURNITURE_TEXTURES, WALL_TEXTURE } from "../pixel-assets";
 
@@ -38,6 +38,22 @@ function AreaFurniture({ area }: { area: AreaLayout }) {
   );
 }
 
+/** One extra prop in the room's bottom-right corner (docs/07 "会社みたいに") - never at a desk slot, so it
+ * never competes with character placement (areaSlotFor uses the same slot list for both). */
+function AreaAccessory({ area }: { area: AreaLayout }) {
+  const prop = AREA_ACCESSORY[area.areaId];
+  if (!prop) return null;
+  return (
+    <Sprite
+      texture={FURNITURE_TEXTURES[prop]}
+      x={area.x + area.width - 20}
+      y={area.y + area.height - 12}
+      anchor={{ x: 1, y: 1 }}
+      scale={{ x: FURNITURE_SCALE * 0.85, y: FURNITURE_SCALE * 0.85 }}
+    />
+  );
+}
+
 function AreaRoom({ area }: { area: AreaLayout }) {
   const floorTint = lightenColor(area.color, 0.72);
   const wallTint = shadeColor(lightenColor(area.color, 0.55), 0.92);
@@ -65,6 +81,7 @@ function AreaRoom({ area }: { area: AreaLayout }) {
         tint={wallTint}
       />
       <AreaFurniture area={area} />
+      <AreaAccessory area={area} />
       <Text text={`${area.icon} ${area.name}`} x={area.x + 8} y={area.y - WALL_HEIGHT + 6} style={AREA_LABEL_STYLE} />
     </>
   );
