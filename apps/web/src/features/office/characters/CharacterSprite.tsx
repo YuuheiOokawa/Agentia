@@ -16,7 +16,7 @@ const WANDER_MIN_DELAY_MS = 2200;
 const WANDER_MAX_DELAY_MS = 5200;
 const WANDER_RADIUS_PX = 22;
 
-/** Raw sprites are a 16x20 pixel-art grid rasterized at 6x (docs: real bitmap assets, not vector shapes). */
+/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x (docs: real bitmap assets, not vector shapes). */
 const SPRITE_SCALE = 0.34;
 
 const ICON_STYLE = new TextStyle({ fontSize: 13 });
