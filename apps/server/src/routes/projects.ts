@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { prisma } from "@agentia/db";
 import type { ProjectRegistry } from "../persistence/project-registry.js";
 import { scanAllSessions, type SessionSummary } from "../persistence/session-history.js";
 
@@ -62,4 +63,18 @@ export function registerProjectRoutes(fastify: FastifyInstance, projectRegistry:
       return reply.send(updated);
     }
   );
+
+  /** docs/10_OFFICE_SYSTEM.md github_hub, docs/18_ROADMAP.md #3: recent GitHub activity panel. */
+  fastify.get<{ Params: { projectId: string } }>("/api/projects/:projectId/github-events", async (request, reply) => {
+    const project = projectRegistry.get(request.params.projectId);
+    if (!project) {
+      return reply.code(404).send({ error: { code: "PROJECT_NOT_FOUND", message: "指定されたプロジェクトが見つかりません", details: null } });
+    }
+    const events = await prisma.githubEvent.findMany({
+      where: { projectId: project.projectId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    return reply.send({ events });
+  });
 }
