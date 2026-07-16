@@ -1,0 +1,34 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --panel-bg: #ffffff;
+  --text: #1a1d23;
+  --text-muted: #6b7280;
+  --border: #e2e4e9;
+  --accent: #1e88e5;
+  --error: #e53935;
+  --success: #43a047;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    "Inter",
+    "Noto Sans JP",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+a {
+  color: inherit;
+}

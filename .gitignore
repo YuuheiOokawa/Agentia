@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.next/
+out/
+*.tsbuildinfo
+.env
+.env.local
+.turbo/
+.agentia/
+coverage/
+.DS_Store
+npm-debug.log*

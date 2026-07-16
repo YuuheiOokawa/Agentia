@@ -1,0 +1,22 @@
+{
+  "name": "@agentia/hook-forwarder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentia-hook": "./bin/agentia-hook.js"
+  },
+  "main": "./dist/forward.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentia/shared-types": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}
