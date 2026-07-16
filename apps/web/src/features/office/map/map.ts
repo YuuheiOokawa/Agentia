@@ -46,13 +46,26 @@ export const AREA_LAYOUT_BY_ID: ReadonlyMap<AreaId, AreaLayout> = new Map(
   PHASE2_AREA_LAYOUT.map((area) => [area.areaId, area])
 );
 
-export type FurnitureProp = "desk" | "bookshelf" | "plant" | "server" | "reception" | "whiteboard" | "cabinet";
+export type FurnitureProp =
+  | "desk"
+  | "bookshelf"
+  | "plant"
+  | "server"
+  | "reception"
+  | "whiteboard"
+  | "cabinet"
+  | "conference_table"
+  | "monitor_wall"
+  | "couch"
+  | "vending_machine";
 
-/** Which pixel-art prop decorates each area's desk slots (docs/10 #2 area definitions). */
-export const AREA_FURNITURE: Record<AreaId, FurnitureProp> = {
+/** Which pixel-art prop decorates each area's desk slots (docs/10 #2 area definitions). A list cycles
+ * across slots by index instead of repeating one prop, for rooms that should read as more varied
+ * (docs/07 "会社みたいに"). */
+export const AREA_FURNITURE: Record<AreaId, FurnitureProp | FurnitureProp[]> = {
   library: "bookshelf",
   research_space: "desk",
-  meeting_room: "desk",
+  meeting_room: "conference_table",
   pm_space: "desk",
   dev_floor: "desk",
   personal_desk: "desk",
@@ -60,8 +73,8 @@ export const AREA_FURNITURE: Record<AreaId, FurnitureProp> = {
   terminal_room: "desk",
   qa_room: "desk",
   deploy_area: "desk",
-  github_hub: "reception",
-  break_room: "plant",
+  github_hub: "monitor_wall",
+  break_room: ["plant", "couch", "vending_machine"],
 };
 
 /**

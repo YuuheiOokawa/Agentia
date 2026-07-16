@@ -59,4 +59,11 @@ export const FURNITURE_TEXTURES: Record<FurnitureProp, Texture> = {
   reception: Texture.from(`${SPRITE_BASE}/prop_reception.png`),
   whiteboard: Texture.from(`${SPRITE_BASE}/prop_whiteboard.png`),
   cabinet: Texture.from(`${SPRITE_BASE}/prop_cabinet.png`),
+  conference_table: Texture.from(`${SPRITE_BASE}/prop_conference_table.png`),
+  monitor_wall: Texture.from(`${SPRITE_BASE}/prop_monitor_wall.png`),
+  couch: Texture.from(`${SPRITE_BASE}/prop_couch.png`),
+  vending_machine: Texture.from(`${SPRITE_BASE}/prop_vending_machine.png`),
 };
+
+/** Wall-mounted window prop for exterior-facing (topmost row) walls, untinted like furniture. */
+export const WINDOW_TEXTURE = Texture.from(`${SPRITE_BASE}/prop_window.png`);

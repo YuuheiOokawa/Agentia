@@ -6,7 +6,7 @@ import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
 import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, OFFICE_HEIGHT, OFFICE_WIDTH, PHASE2_AREA_LAYOUT, roomDividers, type AreaLayout } from "../map/map";
 import { CharacterSprite } from "../characters/CharacterSprite";
-import { FLOOR_EDGE_TEXTURE, FLOOR_TEXTURE, FURNITURE_TEXTURES, PARTITION_TEXTURE, WALL_TEXTURE } from "../pixel-assets";
+import { FLOOR_EDGE_TEXTURE, FLOOR_TEXTURE, FURNITURE_TEXTURES, PARTITION_TEXTURE, WALL_TEXTURE, WINDOW_TEXTURE } from "../pixel-assets";
 
 const AREA_LABEL_STYLE = new TextStyle({
   fontSize: 12,
@@ -18,16 +18,26 @@ const AREA_LABEL_STYLE = new TextStyle({
 
 const WALL_HEIGHT = 22;
 const FURNITURE_SCALE = 0.65;
+/** Fixed literal, not computed from WINDOW_TEXTURE.width/height: PIXI textures report a placeholder
+ * size before their image finishes loading, and a plain Sprite's rendered size is nativeSize*scale
+ * with nothing to bound it - computing scale from a not-yet-loaded texture's dimensions makes the
+ * sprite balloon to fill the stage once the real image loads in. (TilingSprite's tileScale doesn't
+ * have this problem since its own explicit width/height always bounds the render regardless.) */
+const WINDOW_SCALE = 0.3;
+const WINDOW_SPACING_PX = 34;
 
-/** Pixel-art furniture props parked at each area's desk slots, so rooms read as real workspaces (docs/10 #2). */
+/** Pixel-art furniture props parked at each area's desk slots, so rooms read as real workspaces (docs/10 #2).
+ * A room can list several props (docs/07 "会社みたいに") - they cycle across slots by index instead of
+ * repeating one prop everywhere. */
 function AreaFurniture({ area }: { area: AreaLayout }) {
-  const texture = FURNITURE_TEXTURES[AREA_FURNITURE[area.areaId]];
+  const furniture = AREA_FURNITURE[area.areaId];
+  const props = Array.isArray(furniture) ? furniture : [furniture];
   return (
     <>
       {areaSlots(area.areaId).map((slot, i) => (
         <Sprite
           key={i}
-          texture={texture}
+          texture={FURNITURE_TEXTURES[props[i % props.length]!]}
           x={slot.x}
           y={slot.y + 6}
           anchor={{ x: 0.5, y: 1 }}
@@ -121,6 +131,31 @@ function RoomDividers() {
   );
 }
 
+/** Windows on the topmost row's walls only (docs/07 "会社みたいに") - those are the office's exterior-facing
+ * walls, everything else backs onto another room. A fixed-color overlay on top of the tinted wall band,
+ * same as furniture never being tinted by its room's accent color. Anchored to each room's right edge,
+ * growing leftward, so they never collide with the left-aligned room-name label in the same wall band. */
+function ExteriorWindows() {
+  const exteriorAreas = PHASE2_AREA_LAYOUT.filter((area) => area.row === 0);
+  return (
+    <>
+      {exteriorAreas.flatMap((area) => {
+        const count = area.width > 200 ? 2 : 1;
+        return Array.from({ length: count }, (_, i) => (
+          <Sprite
+            key={`${area.areaId}-window-${i}`}
+            texture={WINDOW_TEXTURE}
+            x={area.x + area.width - 12 - i * WINDOW_SPACING_PX}
+            y={area.y - WALL_HEIGHT + 3}
+            anchor={{ x: 1, y: 0 }}
+            scale={{ x: WINDOW_SCALE, y: WINDOW_SCALE }}
+          />
+        ));
+      })}
+    </>
+  );
+}
+
 function OfficeFloor() {
   return (
     <>
@@ -128,6 +163,7 @@ function OfficeFloor() {
       {PHASE2_AREA_LAYOUT.map((area) => (
         <AreaRoom key={area.areaId} area={area} />
       ))}
+      <ExteriorWindows />
     </>
   );
 }

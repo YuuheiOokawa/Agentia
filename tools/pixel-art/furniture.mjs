@@ -59,6 +59,10 @@ const COLORS = {
   yellow: [211, 164, 65, 255],
   bookBlue: [72, 113, 150, 255],
   bookGreen: [78, 137, 90, 255],
+
+  skyBlue: [141, 199, 224, 255],
+  skyBlueLight: [201, 232, 244, 255],
+  frameLight: [232, 232, 226, 255],
 };
 
 function save(grid, palette, name) {
@@ -580,6 +584,238 @@ function generateCabinet() {
   );
 }
 
+/**
+ * 会議テーブル。
+ *
+ * 会議室を個人デスクの並びと差別化するため、
+ * PC付きデスクではなく「囲んで座る楕円テーブル+椅子」にする。
+ */
+function generateConferenceTable() {
+  const grid = createGrid(28, 20);
+
+  // 影
+  fillRect(grid, 2, 16, 24, 2, "S");
+
+  // 奥の椅子(背もたれ)
+  fillRect(grid, 10, 1, 8, 5, "M");
+  fillRect(grid, 11, 2, 6, 3, "m");
+
+  // テーブル脚
+  fillRect(grid, 4, 12, 3, 4, "D");
+  fillRect(grid, 21, 12, 3, 4, "D");
+
+  // 楕円天板
+  fillEllipse(grid, 14, 9, 13, 6, "W");
+  fillEllipse(grid, 14, 8, 12, 5, "L");
+
+  // 天板の艶
+  fillRect(grid, 5, 7, 18, 1, "H");
+
+  // 資料っぽいドット
+  fillRect(grid, 9, 9, 3, 2, "Q");
+  fillRect(grid, 17, 9, 3, 2, "Q");
+
+  save(
+    grid,
+    {
+      O: COLORS.outline,
+
+      D: COLORS.woodDark,
+      W: COLORS.wood,
+      L: COLORS.woodLight,
+      H: COLORS.woodHighlight,
+
+      M: COLORS.metalDark,
+      m: COLORS.metal,
+
+      Q: COLORS.white,
+
+      S: [79, 68, 58, 120],
+    },
+    "conference_table"
+  );
+}
+
+/**
+ * モニターウォール。
+ *
+ * GitHub連携スペースを「受付」ではなく
+ * commit/CI状況を映すダッシュボード壁にする。
+ */
+function generateMonitorWall() {
+  const grid = createGrid(30, 18, "O");
+
+  // フレーム本体
+  fillRect(grid, 1, 1, 28, 16, "F");
+
+  const screens = [
+    [2, 2],
+    [11, 2],
+    [20, 2],
+    [2, 10],
+    [11, 10],
+    [20, 10],
+  ];
+
+  for (const [x, y] of screens) {
+    fillRect(grid, x, y, 8, 7, "S");
+    fillRect(grid, x + 1, y + 1, 6, 2, "s");
+    fillRect(grid, x + 1, y + 4, 4, 1, "g");
+    fillRect(grid, x + 3, y + 5, 3, 1, "g");
+  }
+
+  save(
+    grid,
+    {
+      O: [30, 34, 38, 255],
+      F: COLORS.metalDark,
+
+      S: COLORS.screenDark,
+      s: COLORS.screenLight,
+
+      g: COLORS.green,
+    },
+    "monitor_wall"
+  );
+}
+
+/**
+ * 休憩スペース用ソファ。
+ *
+ * 観葉植物だけだと公園のようになってしまうため、
+ * 座って休めそうな家具を追加する。
+ */
+function generateCouch() {
+  const grid = createGrid(26, 16);
+
+  // 影
+  fillRect(grid, 1, 13, 24, 2, "S");
+
+  // 座面
+  fillRect(grid, 2, 5, 22, 8, "C");
+
+  // 座面ハイライト
+  fillRect(grid, 3, 6, 20, 2, "c");
+
+  // クッション継ぎ目
+  fillRect(grid, 13, 5, 1, 8, "A");
+
+  // 肘掛け
+  fillRect(grid, 1, 2, 3, 10, "A");
+  fillRect(grid, 22, 2, 3, 10, "A");
+
+  // 背もたれ
+  fillRect(grid, 3, 1, 20, 4, "A");
+  fillRect(grid, 4, 2, 18, 2, "a");
+
+  save(
+    grid,
+    {
+      A: COLORS.darkBlue,
+      a: COLORS.blue,
+      C: COLORS.blue,
+      c: COLORS.blueLight,
+
+      S: [60, 55, 51, 120],
+    },
+    "couch"
+  );
+}
+
+/**
+ * 自動販売機。
+ *
+ * 休憩スペースをより「休憩スペースらしく」する家具。
+ */
+function generateVendingMachine() {
+  const grid = createGrid(18, 28, "O");
+
+  // 本体
+  fillRect(grid, 1, 1, 16, 26, "B");
+
+  // ガラス面
+  fillRect(grid, 2, 2, 14, 15, "G");
+
+  // 商品(色違いの小さい箱を並べる)
+  const rows = [4, 9, 14];
+  const productColors = ["R", "Y", "g"];
+  let colorIdx = 0;
+
+  for (const y of rows) {
+    for (let x = 3; x < 15; x += 4) {
+      const color = productColors[colorIdx % productColors.length];
+      colorIdx += 1;
+      fillRect(grid, x, y, 3, 4, color);
+    }
+  }
+
+  // 取り出し口
+  fillRect(grid, 3, 19, 12, 4, "D");
+
+  // 操作パネル・コイン投入口
+  fillRect(grid, 3, 24, 12, 2, "M");
+  fillRect(grid, 13, 24, 2, 2, "m");
+
+  save(
+    grid,
+    {
+      O: [30, 34, 38, 255],
+      B: COLORS.red,
+      D: [40, 44, 48, 255],
+
+      G: COLORS.screenDark,
+
+      R: COLORS.red,
+      Y: COLORS.yellow,
+      g: COLORS.green,
+
+      M: COLORS.metalDark,
+      m: COLORS.metalLight,
+    },
+    "vending_machine"
+  );
+}
+
+/**
+ * 外壁の窓。
+ *
+ * 一番奥(row0)の壁に貼ることで、
+ * 「実在するビルのオフィス」感を出す。
+ * 什器と同じく部屋ごとのtintの影響を受けない固定色。
+ */
+function generateWindow() {
+  const grid = createGrid(16, 14, "O");
+
+  // 窓枠
+  fillRect(grid, 1, 1, 14, 12, "F");
+
+  // ガラス
+  fillRect(grid, 2, 2, 12, 10, "G");
+
+  // 空のグラデーション(上が明るい)
+  fillRect(grid, 2, 2, 12, 4, "g");
+
+  // 窓桟(十字)
+  fillRect(grid, 7, 2, 2, 10, "F");
+  fillRect(grid, 2, 7, 12, 1, "F");
+
+  // 枠のハイライト
+  fillRect(grid, 1, 1, 14, 1, "L");
+
+  save(
+    grid,
+    {
+      O: COLORS.outline,
+      F: COLORS.frameLight,
+      L: COLORS.white,
+
+      G: COLORS.skyBlue,
+      g: COLORS.skyBlueLight,
+    },
+    "window"
+  );
+}
+
 export function generateFurniture() {
   generateDesk();
   generateBookshelf();
@@ -590,6 +826,13 @@ export function generateFurniture() {
   // オフィスの密度を上げる追加家具
   generateWhiteboard();
   generateCabinet();
+
+  // 「会社らしさ」を強めるための追加家具
+  generateConferenceTable();
+  generateMonitorWall();
+  generateCouch();
+  generateVendingMachine();
+  generateWindow();
 
   console.log(`
 Generated furniture props:
@@ -614,5 +857,20 @@ Generated furniture props:
 
 - prop_cabinet.png
   オフィス用キャビネット
+
+- prop_conference_table.png
+  会議室用の楕円テーブル
+
+- prop_monitor_wall.png
+  GitHub連携スペース用モニターウォール
+
+- prop_couch.png
+  休憩スペース用ソファ
+
+- prop_vending_machine.png
+  休憩スペース用自動販売機
+
+- prop_window.png
+  最奥の部屋の外壁に貼る窓
 `);
 }
