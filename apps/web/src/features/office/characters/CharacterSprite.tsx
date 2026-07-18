@@ -8,13 +8,14 @@ import type { AreaId, Employee } from "@agentia/shared-types";
 import { areaSlotFor, areaWanderBounds, pathToArea } from "../map/map";
 import { CHARACTER_TEXTURES, poseForState, type Facing } from "../pixel-assets";
 
-const WALK_SPEED_PX_PER_MS = 0.09;
+const WALK_SPEED_PX_PER_MS = 0.11;
 const ARRIVAL_EPSILON_PX = 1.5;
 /** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam their whole room
  * every few seconds instead of standing frozen at their desk - this is purely a rendering-layer
- * flourish, not store state. */
-const WANDER_MIN_DELAY_MS = 1500;
-const WANDER_MAX_DELAY_MS = 4000;
+ * flourish, not store state. Short delays so the office always has someone visibly moving, closer
+ * to how busy a Kairosoft office floor reads. */
+const WANDER_MIN_DELAY_MS = 900;
+const WANDER_MAX_DELAY_MS = 2600;
 /** Below this vertical speed, a moving character keeps its current facing instead of flickering
  * between front/back on near-horizontal movement. */
 const FACING_DEADZONE_PX = 1.5;
@@ -76,6 +77,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const bodyGroupRef = useRef<PixiContainer | null>(null);
   const bodySpriteRef = useRef<PixiSprite | null>(null);
   const detailsSpriteRef = useRef<PixiSprite | null>(null);
+  const shadowRef = useRef<PixiGraphics | null>(null);
   const posRef = useRef({ ...initialPos });
   const pathRef = useRef<Array<{ x: number; y: number }>>([]);
   const lastAreaIdRef = useRef<AreaId>(employee.areaId);
@@ -122,15 +124,29 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     if (outerRef.current) {
       outerRef.current.position.set(posRef.current.x, posRef.current.y);
     }
+    const t = clockRef.current * 0.001;
+    /** 0..1 walk-cycle phase while moving, so the bounce/sway/shadow-squash all stay in lockstep
+     * (a proper "footstep" feel instead of independent wobbles), and settle back to neutral (0)
+     * the instant the character stops. */
+    const stepPhase = moving ? Math.abs(Math.sin(t * 13)) : 0;
+
     if (bodyGroupRef.current) {
-      const t = clockRef.current * 0.001;
       if (moving) {
         bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 26) * 0.06));
-        bodyGroupRef.current.position.y = 3 + Math.abs(Math.sin(t * 13)) * -3;
+        bodyGroupRef.current.position.y = 3 - stepPhase * 3;
+        bodyGroupRef.current.position.x = Math.sin(t * 13) * 2.2;
       } else {
         bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
         bodyGroupRef.current.position.y = 3;
+        bodyGroupRef.current.position.x = 0;
       }
+    }
+    if (shadowRef.current) {
+      const shadowScale = 1 - stepPhase * 0.18;
+      shadowRef.current.clear();
+      shadowRef.current.beginFill(0x000000, 0.18);
+      shadowRef.current.drawEllipse(0, 4, 11 * shadowScale, 4 * shadowScale);
+      shadowRef.current.endFill();
     }
 
     const facedTextures = CHARACTER_TEXTURES[poseForState(employee.state)][facingRef.current];
@@ -152,7 +168,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
 
   return (
     <Container ref={outerRef}>
-      <Graphics draw={drawShadow} />
+      <Graphics ref={shadowRef} draw={drawShadow} />
       <Container ref={bodyGroupRef}>
         {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
             (hair/skin/eyes/pants), so per-role/avatar tinting never discolors skin or hair. */}
