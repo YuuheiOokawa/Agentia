@@ -15,9 +15,13 @@ export const PARAPET_H = 12;
 export const GRID_COLS = 27;
 export const GRID_ROWS = 19;
 
-const MARGIN_X = 20;
+/** Wide enough for the 2-tile sidewalk apron + exterior planting drawn around the building. */
+const MARGIN_X = 66;
 const MARGIN_TOP = WALL_H + 34;
-const MARGIN_BOTTOM = 26;
+const MARGIN_BOTTOM = 56;
+
+/** How many tiles of grey sidewalk ring the building (docs/07: grounds the diorama like the reference). */
+export const APRON_TILES = 2;
 
 /** Screen position of world origin (0,0): pushed right so the grid's leftmost corner (0, GRID_ROWS) fits. */
 export const ORIGIN_X = MARGIN_X + GRID_ROWS * (TILE_W / 2);

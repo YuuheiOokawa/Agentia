@@ -22,8 +22,8 @@ const WANDER_MAX_DELAY_MS = 2600;
 const DIRECTION_DEADZONE = 0.25;
 
 /** Raw sprites are a 24x30 pixel-art grid rasterized at 5x; scaled so a character stands about
- * 1.4 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
-const SPRITE_SCALE = 0.21;
+ * 1.5 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
+const SPRITE_SCALE = 0.23;
 
 const ICON_STYLE = new TextStyle({ fontSize: 12 });
 const NAME_STYLE = new TextStyle({ fontSize: 10, fill: 0x1a1d23, fontWeight: "600", stroke: 0xffffff, strokeThickness: 3 });
@@ -124,7 +124,9 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       wanderDeadlineRef.current = Date.now() + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
     }
 
-    if (!moving) facingRef.current = "front";
+    // Stationary characters in a working state face their desk (we see their back, like the
+    // reference's workers seated at monitors); everyone else turns toward the viewer.
+    if (!moving) facingRef.current = poseForState(employee.state) === "working" ? "back" : "front";
 
     if (outerRef.current) {
       const screen = isoToScreen(posRef.current.x, posRef.current.y);

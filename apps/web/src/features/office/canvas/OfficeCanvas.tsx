@@ -7,6 +7,7 @@ import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
 import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
 import {
+  APRON_TILES,
   GRID_COLS,
   GRID_ROWS,
   isoDepth,
@@ -36,22 +37,50 @@ function tileDiamond(g: PixiGraphics, tx: number, ty: number): void {
   g.drawPolygon([top.x, top.y, right.x, right.y, bottom.x, bottom.y, left.x, left.y]);
 }
 
-/** Neutral checkerboard under the whole grid - corridors and the ground rooms sit on. */
+/** Neutral checkerboard under the whole grid, ringed by a grey sidewalk apron, with the building's
+ * soft drop shadow cast onto the apron along its south/east faces - grounds the diorama like the
+ * reference instead of floating it on the page background. */
 function BaseFloor() {
   const draw = (g: PixiGraphics) => {
     g.clear();
-    for (let ty = 0; ty < GRID_ROWS; ty += 1) {
-      for (let tx = 0; tx < GRID_COLS; tx += 1) {
-        g.beginFill((tx + ty) % 2 === 0 ? 0xd9d6cf : 0xcfccc4);
+    for (let ty = -1; ty < GRID_ROWS + APRON_TILES; ty += 1) {
+      for (let tx = -APRON_TILES; tx < GRID_COLS + APRON_TILES; tx += 1) {
+        const inside = tx >= 0 && tx < GRID_COLS && ty >= 0 && ty < GRID_ROWS;
+        if (inside) g.beginFill((tx + ty) % 2 === 0 ? 0xd9d6cf : 0xcfccc4);
+        else g.beginFill((tx + ty) % 2 === 0 ? 0xe0e0de : 0xd8d8d6);
         tileDiamond(g, tx, ty);
         g.endFill();
       }
     }
+
+    // Building shadow onto the apron (south face, then east face).
+    const s1 = isoToScreen(0, GRID_ROWS);
+    const s2 = isoToScreen(GRID_COLS, GRID_ROWS);
+    const s3 = isoToScreen(GRID_COLS, GRID_ROWS + 0.8);
+    const s4 = isoToScreen(0, GRID_ROWS + 0.8);
+    g.beginFill(0x000000, 0.1);
+    g.drawPolygon([s1.x, s1.y, s2.x, s2.y, s3.x, s3.y, s4.x, s4.y]);
+    g.endFill();
+    const e1 = isoToScreen(GRID_COLS, 0);
+    const e2 = isoToScreen(GRID_COLS, GRID_ROWS);
+    const e3 = isoToScreen(GRID_COLS + 0.8, GRID_ROWS);
+    const e4 = isoToScreen(GRID_COLS + 0.8, 0);
+    g.beginFill(0x000000, 0.1);
+    g.drawPolygon([e1.x, e1.y, e2.x, e2.y, e3.x, e3.y, e4.x, e4.y]);
+    g.endFill();
+
+    // Entrance doormat centered on the building's front edge.
+    const mat = isoToScreen(13.5, GRID_ROWS + 0.55);
+    g.beginFill(0x9b958d);
+    g.drawPolygon([mat.x - 20, mat.y, mat.x, mat.y - 10, mat.x + 20, mat.y, mat.x, mat.y + 10]);
+    g.endFill();
   };
   return <Graphics zIndex={-1000} draw={draw} />;
 }
 
-/** A room's colored checker floor (two lightened shades of its accent color). */
+/** A room's colored checker floor (two lightened shades of its accent color), with a soft ambient-
+ * occlusion strip along the two back walls so the floor visibly "meets" them - the classic
+ * Kairosoft interior shading cue. */
 function RoomFloor({ area }: { area: AreaLayout }) {
   const shadeA = lightenColor(area.color, 0.76);
   const shadeB = lightenColor(area.color, 0.68);
@@ -64,6 +93,21 @@ function RoomFloor({ area }: { area: AreaLayout }) {
         g.endFill();
       }
     }
+
+    const n1 = isoToScreen(area.gx, area.gy);
+    const n2 = isoToScreen(area.gx + area.gw, area.gy);
+    const n3 = isoToScreen(area.gx + area.gw, area.gy + 0.45);
+    const n4 = isoToScreen(area.gx, area.gy + 0.45);
+    g.beginFill(0x000000, 0.09);
+    g.drawPolygon([n1.x, n1.y, n2.x, n2.y, n3.x, n3.y, n4.x, n4.y]);
+    g.endFill();
+    const w1 = isoToScreen(area.gx, area.gy);
+    const w2 = isoToScreen(area.gx, area.gy + area.gh);
+    const w3 = isoToScreen(area.gx + 0.45, area.gy + area.gh);
+    const w4 = isoToScreen(area.gx + 0.45, area.gy);
+    g.beginFill(0x000000, 0.09);
+    g.drawPolygon([w1.x, w1.y, w2.x, w2.y, w3.x, w3.y, w4.x, w4.y]);
+    g.endFill();
   };
   return <Graphics zIndex={-500} draw={draw} />;
 }
@@ -82,13 +126,20 @@ function RoomWalls({ area }: { area: AreaLayout }) {
   const west = shadeColor(base, 0.75);
   const parapet = shadeColor(base, 0.9);
   const parapetSide = shadeColor(base, 0.72);
-  const trim = lightenColor(base, 0.55);
+  /** Bright top face showing the wall's thickness - what makes walls read as solid, not paper. */
+  const cap = lightenColor(base, 0.72);
+
+  /** Wall/parapet thickness in tiles, extruded outward from the room. */
+  const T = 0.14;
+  const TP = 0.1;
 
   const segments: Array<{ key: string; z: number; draw: (g: PixiGraphics) => void }> = [];
 
   for (let tx = area.gx; tx < area.gx + area.gw; tx += 1) {
     const p1 = isoToScreen(tx, area.gy);
     const p2 = isoToScreen(tx + 1, area.gy);
+    const c1 = isoToScreen(tx, area.gy - T);
+    const c2 = isoToScreen(tx + 1, area.gy - T);
     segments.push({
       key: `n${tx}`,
       z: isoDepth(tx + 0.5, area.gy) - 0.1,
@@ -97,24 +148,26 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         g.beginFill(north);
         g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
         g.endFill();
-        g.beginFill(trim);
-        g.drawPolygon([p1.x, p1.y - WALL_H, p2.x, p2.y - WALL_H, p2.x, p2.y - WALL_H + 3, p1.x, p1.y - WALL_H + 3]);
+        g.beginFill(cap);
+        g.drawPolygon([c1.x, c1.y - WALL_H, c2.x, c2.y - WALL_H, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
         g.endFill();
       },
     });
 
     const q1 = isoToScreen(tx, area.gy + area.gh);
     const q2 = isoToScreen(tx + 1, area.gy + area.gh);
+    const d1 = isoToScreen(tx, area.gy + area.gh + TP);
+    const d2 = isoToScreen(tx + 1, area.gy + area.gh + TP);
     segments.push({
       key: `s${tx}`,
       z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
       draw: (g) => {
         g.clear();
         g.beginFill(parapet);
-        g.drawPolygon([q1.x, q1.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H, q1.x, q1.y - PARAPET_H]);
+        g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
         g.endFill();
-        g.beginFill(trim);
-        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, q2.x, q2.y - PARAPET_H + 2, q1.x, q1.y - PARAPET_H + 2]);
+        g.beginFill(cap);
+        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
         g.endFill();
       },
     });
@@ -123,6 +176,8 @@ function RoomWalls({ area }: { area: AreaLayout }) {
   for (let ty = area.gy; ty < area.gy + area.gh; ty += 1) {
     const p1 = isoToScreen(area.gx, ty);
     const p2 = isoToScreen(area.gx, ty + 1);
+    const c1 = isoToScreen(area.gx - T, ty);
+    const c2 = isoToScreen(area.gx - T, ty + 1);
     segments.push({
       key: `w${ty}`,
       z: isoDepth(area.gx, ty + 0.5) - 0.1,
@@ -131,21 +186,44 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         g.beginFill(west);
         g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
         g.endFill();
-        g.beginFill(trim);
-        g.drawPolygon([p1.x, p1.y - WALL_H, p2.x, p2.y - WALL_H, p2.x, p2.y - WALL_H + 3, p1.x, p1.y - WALL_H + 3]);
+        g.beginFill(cap);
+        g.drawPolygon([c1.x, c1.y - WALL_H, c2.x, c2.y - WALL_H, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
         g.endFill();
       },
     });
 
     const q1 = isoToScreen(area.gx + area.gw, ty);
     const q2 = isoToScreen(area.gx + area.gw, ty + 1);
+    const d1 = isoToScreen(area.gx + area.gw + TP, ty);
+    const d2 = isoToScreen(area.gx + area.gw + TP, ty + 1);
     segments.push({
       key: `e${ty}`,
       z: isoDepth(area.gx + area.gw, ty + 0.5) - 0.1,
       draw: (g) => {
         g.clear();
         g.beginFill(parapetSide);
-        g.drawPolygon([q1.x, q1.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H, q1.x, q1.y - PARAPET_H]);
+        g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+        g.endFill();
+        g.beginFill(cap);
+        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+        g.endFill();
+      },
+    });
+  }
+
+  // Corner cap where the two full-height back walls meet, closing the top face neatly.
+  {
+    const k1 = isoToScreen(area.gx - T, area.gy - T);
+    const k2 = isoToScreen(area.gx, area.gy - T);
+    const k3 = isoToScreen(area.gx, area.gy);
+    const k4 = isoToScreen(area.gx - T, area.gy);
+    segments.push({
+      key: "nw-cap",
+      z: isoDepth(area.gx, area.gy) - 0.1,
+      draw: (g) => {
+        g.clear();
+        g.beginFill(cap);
+        g.drawPolygon([k1.x, k1.y - WALL_H, k2.x, k2.y - WALL_H, k3.x, k3.y - WALL_H, k4.x, k4.y - WALL_H]);
         g.endFill();
       },
     });
@@ -236,6 +314,85 @@ function AreaAccessory({ area }: { area: AreaLayout }) {
       scale={{ x: FURNITURE_SCALE * 0.85, y: FURNITURE_SCALE * 0.85 }}
       zIndex={isoDepth(wx, wy)}
     />
+  );
+}
+
+/** A potted plant in the front-left corner of most rooms - cheap interior density (the tech rooms
+ * and the break room, which already cycles plants, are left out). */
+const PLANTED_ROOMS = new Set(["library", "research_space", "meeting_room", "pm_space", "dev_floor", "personal_desk", "terminal_room", "qa_room", "deploy_area"]);
+
+function RoomPlant({ area }: { area: AreaLayout }) {
+  if (!PLANTED_ROOMS.has(area.areaId)) return null;
+  const wx = area.gx + 0.75;
+  const wy = area.gy + area.gh - 0.75;
+  const screen = isoToScreen(wx, wy);
+  return (
+    <Sprite
+      texture={FURNITURE_TEXTURES.plant}
+      x={screen.x}
+      y={screen.y + 3}
+      anchor={{ x: 0.5, y: 1 }}
+      scale={{ x: 0.26, y: 0.26 }}
+      zIndex={isoDepth(wx, wy)}
+    />
+  );
+}
+
+/** Planting on the sidewalk apron around the building (world positions outside the grid). */
+const EXTERIOR_TREES = [
+  { wx: -1.2, wy: 4 },
+  { wx: -1.2, wy: 11 },
+  { wx: GRID_COLS + 1.2, wy: 6 },
+  { wx: GRID_COLS + 1.2, wy: 13 },
+  { wx: 6, wy: GRID_ROWS + 0.9 },
+  { wx: 21, wy: GRID_ROWS + 0.9 },
+] as const;
+
+function ExteriorTrees() {
+  return (
+    <>
+      {EXTERIOR_TREES.map((tree, i) => {
+        const screen = isoToScreen(tree.wx, tree.wy);
+        return (
+          <Sprite
+            key={i}
+            texture={FURNITURE_TEXTURES.plant}
+            x={screen.x}
+            y={screen.y + 3}
+            anchor={{ x: 0.5, y: 1 }}
+            scale={{ x: 0.5, y: 0.5 }}
+            zIndex={isoDepth(tree.wx, tree.wy)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+const ENTRANCE_SIGN_STYLE = new TextStyle({ fontSize: 13, fontWeight: "700", fill: 0xffffff, letterSpacing: 1 });
+
+/** "Agentia" sign over the building's front entrance, like the reference's canopy. */
+function EntranceSign() {
+  const anchor = isoToScreen(13.5, GRID_ROWS);
+  const metrics = TextMetrics.measureText("Agentia", ENTRANCE_SIGN_STYLE);
+  const w = metrics.width + 24;
+  const h = metrics.height + 8;
+  const x = anchor.x - w / 2;
+  const y = anchor.y - PARAPET_H - h - 6;
+  const draw = (g: PixiGraphics) => {
+    g.clear();
+    g.beginFill(0x4a3b2f, 0.97);
+    g.drawRoundedRect(x, y, w, h, 4);
+    g.endFill();
+    g.beginFill(0x4a3b2f, 0.97);
+    g.drawRect(anchor.x - 2, y + h, 4, 8);
+    g.endFill();
+  };
+  return (
+    <>
+      <Graphics draw={draw} />
+      <Text text="Agentia" x={anchor.x} y={y + 4} anchor={{ x: 0.5, y: 0 }} style={ENTRANCE_SIGN_STYLE} />
+    </>
   );
 }
 
@@ -374,10 +531,15 @@ export function OfficeCanvas() {
         {PHASE2_AREA_LAYOUT.map((area) => (
           <AreaAccessory key={`acc-${area.areaId}`} area={area} />
         ))}
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <RoomPlant key={`plant-${area.areaId}`} area={area} />
+        ))}
+        <ExteriorTrees />
         <CharacterLayer />
       </Container>
       <Container>
         <FlowOverlay />
+        <EntranceSign />
         {PHASE2_AREA_LAYOUT.map((area) => (
           <RoomLabel key={`label-${area.areaId}`} area={area} />
         ))}

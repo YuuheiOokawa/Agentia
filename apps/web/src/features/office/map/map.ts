@@ -135,12 +135,17 @@ export function areaSlots(areaId: AreaId): Array<{ x: number; y: number }> {
   return slots;
 }
 
-/** Deterministically assigns one employee to one desk slot so simultaneous coworkers don't overlap. */
+/** How far in front of (south of) a desk slot a character stands to "use" it. Combined with the
+ * back-facing sprite while working, the character reads as seated at the desk facing its monitor. */
+const SEAT_OFFSET_Y = 0.35;
+
+/** Deterministically assigns one employee to one desk slot so simultaneous coworkers don't overlap.
+ * Returns the SEAT position (just in front of the furniture), not the furniture's own tile. */
 export function areaSlotFor(areaId: AreaId, agentId: string): { x: number; y: number } {
   const slots = areaSlots(areaId);
   if (slots.length === 0) return areaCenter(areaId);
-  const slot = slots[hashCode(agentId) % slots.length];
-  return slot ?? areaCenter(areaId);
+  const slot = slots[hashCode(agentId) % slots.length] ?? areaCenter(areaId);
+  return { x: slot.x, y: slot.y + SEAT_OFFSET_Y };
 }
 
 /** The corridor row a character exits into when leaving `row` heading toward `towardRow`. */
