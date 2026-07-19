@@ -21,11 +21,14 @@ interface OfficeStoreState {
   connectionState: ConnectionState;
   claudeCodeOffline: boolean;
   lastSeq: number;
+  /** STEP10: the employee whose detail card is open (clicked in the office canvas). */
+  selectedAgentId: string | null;
 
   applyIncomingEvent: (event: InternalEvent) => void;
   hydrateSnapshot: (employees: Employee[]) => void;
   setConnectionState: (state: ConnectionState) => void;
   tickMovementQueues: () => void;
+  selectEmployee: (agentId: string | null) => void;
 }
 
 /** docs/13_FRONTEND_DESIGN.md #2: the OfficeStore is the discrete source of truth (state + destination), not pixel coordinates. */
@@ -35,6 +38,7 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   connectionState: "reconnecting",
   claudeCodeOffline: false,
   lastSeq: 0,
+  selectedAgentId: null,
 
   applyIncomingEvent: (event) => {
     const employees = applyEvent(get().employees, event);
@@ -63,6 +67,8 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   },
 
   setConnectionState: (connectionState) => set({ connectionState }),
+
+  selectEmployee: (agentId) => set({ selectedAgentId: agentId }),
 
   tickMovementQueues: () => {
     const employees = drainAllQueues(get().employees, (slice) => {

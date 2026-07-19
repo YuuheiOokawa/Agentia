@@ -1,29 +1,38 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { Container, Graphics, Sprite, Text } from "@pixi/react";
 import { useTick } from "@pixi/react";
 import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics, type Sprite as PixiSprite } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
-import { areaSlotFor, areaWanderBounds, pathToArea } from "../map/map";
+import { useOfficeStore } from "@/stores/office-store";
+import { areaSlotFor } from "../map/map";
+import { findPath } from "../map/pathfinding";
 import { isoDepth, isoToScreen } from "../map/iso";
-import { CHARACTER_TEXTURES, poseForState, type Facing } from "../pixel-assets";
+import { characterTextures, poseForState, type Facing } from "../pixel-assets";
+import {
+  AMBIENT_PAUSE_MAX_MS,
+  AMBIENT_PAUSE_MIN_MS,
+  AMBIENT_TRIP_CHANCE,
+  pickBreakSpot,
+  pickWanderTarget,
+  type AmbientState,
+} from "./behavior";
 
-/** Movement now happens in WORLD (tile) units - see iso.ts; rendering converts per tick. */
+/** Movement happens in WORLD (tile) units over A* waypoints (pathfinding.ts); rendering converts per tick. */
 const WALK_SPEED_TILES_PER_MS = 0.005;
 const ARRIVAL_EPSILON_TILES = 0.08;
-/** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam their whole room
- * every few seconds instead of standing frozen at their desk - this is purely a rendering-layer
- * flourish, not store state. */
-const WANDER_MIN_DELAY_MS = 900;
-const WANDER_MAX_DELAY_MS = 2600;
+/** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam every few
+ * seconds instead of standing frozen - purely a rendering-layer flourish, not store state. */
+const WANDER_MIN_DELAY_MS = 1500;
+const WANDER_MAX_DELAY_MS = 4500;
 /** World-space deadzone below which the facing/mirror keeps its previous value, so near-diagonal
  * movement doesn't flicker between front/back or left/right every frame. */
 const DIRECTION_DEADZONE = 0.25;
 
 /** Raw sprites are a 24x30 pixel-art grid rasterized at 5x; scaled so a character stands about
  * 1.5 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
-const SPRITE_SCALE = 0.23;
+const SPRITE_SCALE = 0.26;
 
 const ICON_STYLE = new TextStyle({ fontSize: 12 });
 const NAME_STYLE = new TextStyle({ fontSize: 10, fill: 0x1a1d23, fontWeight: "600", stroke: 0xffffff, strokeThickness: 3 });
@@ -39,18 +48,19 @@ const ROLE_COLOR: Record<string, number> = {
   generic: 0x757575,
 };
 
+/** STEP10: what the speech bubble above the head shows per state (empty = no bubble). */
 const STATE_ICON: Record<string, string> = {
   idle: "",
   moving: "",
   researching: "🔍",
   reading: "📖",
-  planning: "🗂",
+  planning: "💭",
   coding: "⌨️",
   terminal: "🖥",
   testing: "🧪",
   deploying: "🚀",
   waiting: "💬",
-  error: "⚠️",
+  error: "❗",
   completed: "✅",
 };
 
@@ -70,6 +80,7 @@ function shadeColor(base: number, variant: number): number {
 }
 
 export function CharacterSprite({ employee }: { employee: Employee }) {
+  const selectEmployee = useOfficeStore((s) => s.selectEmployee);
   const initialPos = useRef(areaSlotFor(employee.areaId, employee.agentId)).current;
 
   const outerRef = useRef<PixiContainer | null>(null);
@@ -79,6 +90,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const shadowRef = useRef<PixiGraphics | null>(null);
   /** Current position in world tiles. */
   const posRef = useRef({ ...initialPos });
+  /** A* waypoints (world tiles) still to visit. */
   const pathRef = useRef<Array<{ x: number; y: number }>>([]);
   const lastAreaIdRef = useRef<AreaId>(employee.areaId);
   const wanderDeadlineRef = useRef<number>(Date.now() + WANDER_MIN_DELAY_MS + Math.random() * 1500);
@@ -87,14 +99,21 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const facingRef = useRef<Facing>("front");
   /** -1 mirrors the sprite while walking screen-left, +1 while walking screen-right. */
   const mirrorRef = useRef<1 | -1>(1);
+  /** STEP9 ambient stroll (break-room trip) progress - rendering-layer only. */
+  const ambientRef = useRef<AmbientState>({ phase: "none", until: 0 });
 
   useTick((delta) => {
     clockRef.current += delta;
+    const now = Date.now();
 
+    // A REAL destination change (Claude Code event moved this employee) always wins: abandon any
+    // ambient stroll and plan an A* path from wherever the character physically is right now -
+    // never a teleport (STEP2 forbidden list).
     if (employee.areaId !== lastAreaIdRef.current) {
-      pathRef.current = pathToArea(lastAreaIdRef.current, employee.areaId, employee.agentId);
       lastAreaIdRef.current = employee.areaId;
-      wanderDeadlineRef.current = Date.now() + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
+      ambientRef.current = { phase: "none", until: 0 };
+      pathRef.current = findPath(posRef.current, areaSlotFor(employee.areaId, employee.agentId));
+      wanderDeadlineRef.current = now + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
     }
 
     let moving = false;
@@ -103,6 +122,17 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       const dist = distance(posRef.current, next);
       if (dist < ARRIVAL_EPSILON_TILES) {
         pathRef.current = pathRef.current.slice(1);
+        if (pathRef.current.length === 0) {
+          // Arrival hooks for the ambient stroll state machine.
+          if (ambientRef.current.phase === "going") {
+            ambientRef.current = {
+              phase: "away",
+              until: now + AMBIENT_PAUSE_MIN_MS + Math.random() * (AMBIENT_PAUSE_MAX_MS - AMBIENT_PAUSE_MIN_MS),
+            };
+          } else if (ambientRef.current.phase === "returning") {
+            ambientRef.current = { phase: "none", until: 0 };
+          }
+        }
       } else {
         moving = true;
         const dx = next.x - posRef.current.x;
@@ -118,14 +148,31 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         const ratio = step / dist;
         posRef.current = { x: posRef.current.x + dx * ratio, y: posRef.current.y + dy * ratio };
       }
-    } else if (WANDERABLE_STATES.has(employee.state) && Date.now() > wanderDeadlineRef.current) {
-      const bounds = areaWanderBounds(employee.areaId);
-      pathRef.current = [{ x: bounds.x + Math.random() * bounds.width, y: bounds.y + Math.random() * bounds.height }];
-      wanderDeadlineRef.current = Date.now() + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
+    } else if (WANDERABLE_STATES.has(employee.state) && now > wanderDeadlineRef.current) {
+      const ambient = ambientRef.current;
+      if (ambient.phase === "away") {
+        if (now >= ambient.until) {
+          // Done lingering in the break room - stroll back to the own seat.
+          pathRef.current = findPath(posRef.current, areaSlotFor(employee.areaId, employee.agentId));
+          ambientRef.current = { phase: "returning", until: 0 };
+        }
+      } else if (employee.areaId !== "break_room" && Math.random() < AMBIENT_TRIP_CHANCE) {
+        // STEP9: take a break - walk to the break room (vending machine / water server / couches).
+        const spot = pickBreakSpot();
+        if (spot) {
+          pathRef.current = findPath(posRef.current, spot);
+          ambientRef.current = { phase: "going", until: 0 };
+        }
+      } else {
+        // Look around the own room a little.
+        const target = pickWanderTarget(employee.areaId);
+        if (target) pathRef.current = findPath(posRef.current, target);
+      }
+      wanderDeadlineRef.current = now + WANDER_MIN_DELAY_MS + Math.random() * (WANDER_MAX_DELAY_MS - WANDER_MIN_DELAY_MS);
     }
 
-    // Stationary characters in a working state face their desk (we see their back, like the
-    // reference's workers seated at monitors); everyone else turns toward the viewer.
+    // Stationary characters in a working state face their desk (we see their back, seated at the
+    // monitor); everyone else turns toward the viewer.
     if (!moving) facingRef.current = poseForState(employee.state) === "working" ? "back" : "front";
 
     if (outerRef.current) {
@@ -161,7 +208,10 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       shadowRef.current.endFill();
     }
 
-    const facedTextures = CHARACTER_TEXTURES[poseForState(employee.state)][facingRef.current];
+    // While walking, always use the neutral idle pose (no typing-in-midair); the state pose
+    // applies once the character has arrived (STEP4: walk animation distinct from work animation).
+    const pose = moving ? "idle" : poseForState(employee.state);
+    const facedTextures = characterTextures(employee.avatarVariant, pose, facingRef.current);
     if (bodySpriteRef.current) bodySpriteRef.current.texture = facedTextures.body;
     if (detailsSpriteRef.current) detailsSpriteRef.current.texture = facedTextures.details;
   });
@@ -169,7 +219,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const tint = shadeColor(ROLE_COLOR[employee.role] ?? ROLE_COLOR["generic"] ?? 0x757575, employee.avatarVariant);
   const icon = STATE_ICON[employee.state] ?? "";
   const pose = poseForState(employee.state);
-  const textures = CHARACTER_TEXTURES[pose][facingRef.current];
+  const textures = characterTextures(employee.avatarVariant, pose, facingRef.current);
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
@@ -178,8 +228,33 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     g.endFill();
   };
 
+  /** STEP10: white speech bubble with a tail, holding the state icon above the head. */
+  const drawBubble = useCallback(
+    (g: PixiGraphics) => {
+      g.clear();
+      if (!icon) return;
+      g.lineStyle(1, 0xb9bec9, 1);
+      g.beginFill(0xffffff, 0.96);
+      g.drawRoundedRect(-11, -62, 22, 20, 7);
+      g.endFill();
+      g.lineStyle(0);
+      g.beginFill(0xffffff, 0.96);
+      g.drawPolygon([-4, -43, 4, -43, 0, -37]);
+      g.endFill();
+    },
+    [icon]
+  );
+
+  const handleTap = useCallback(() => selectEmployee(employee.agentId), [selectEmployee, employee.agentId]);
+
   return (
-    <Container ref={outerRef} zIndex={isoDepth(initialPos.x, initialPos.y) + 0.02}>
+    <Container
+      ref={outerRef}
+      zIndex={isoDepth(initialPos.x, initialPos.y) + 0.02}
+      eventMode="static"
+      cursor="pointer"
+      pointerdown={handleTap}
+    >
       <Graphics ref={shadowRef} draw={drawShadow} />
       <Container ref={bodyGroupRef}>
         {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
@@ -187,7 +262,8 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         <Sprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
         <Sprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
       </Container>
-      {icon && <Text text={icon} x={-6} y={-46} style={ICON_STYLE} />}
+      <Graphics draw={drawBubble} />
+      {icon && <Text text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}
       <Text text={employee.displayName} x={0} y={7} anchor={{ x: 0.5, y: 0 }} style={NAME_STYLE} />
     </Container>
   );

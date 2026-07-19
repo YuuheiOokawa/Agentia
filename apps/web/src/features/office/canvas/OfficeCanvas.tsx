@@ -5,7 +5,13 @@ import { Stage, Container, Graphics, Sprite, Text } from "@pixi/react";
 import { TextMetrics, TextStyle, type Graphics as PixiGraphics } from "pixi.js";
 import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
-import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
+import {
+  AREA_DOORS,
+  areaDecorPlacements,
+  areaFurniturePlacements,
+  PHASE2_AREA_LAYOUT,
+  type AreaLayout,
+} from "../map/map";
 import {
   APRON_TILES,
   GRID_COLS,
@@ -142,10 +148,25 @@ function RoomWalls({ area }: { area: AreaLayout }) {
   const parapetSide = shadeColor(base, 0.72);
   /** Bright top face showing the wall's thickness - what makes walls read as solid, not paper. */
   const cap = lightenColor(base, 0.72);
+  const doorFrame = 0x8a6f52;
+  const threshold = 0xe8e2d4;
 
   /** Wall/parapet thickness in tiles, extruded outward from the room. */
   const T = 0.14;
   const TP = 0.1;
+
+  /** STEP2: this room's doorways - those wall tiles render as openings instead of solid segments. */
+  const doors = AREA_DOORS.filter((d) => d.areaId === area.areaId);
+  const northDoorCols = new Set(doors.filter((d) => d.side === "north").map((d) => d.cx));
+  const southDoorCols = new Set(doors.filter((d) => d.side === "south").map((d) => d.cx));
+  /** Height of the header bar left above a doorway cut into a full-height wall. */
+  const LINTEL_H = 12;
+  /** Interior partition walls are mid-height so characters walking the corridor BEHIND a room
+   * still peek over them (full-height walls would swallow corridor walkers whole); only the
+   * building's exterior back/west walls keep the full height. */
+  const PARTITION_WALL_H = 20;
+  const northH = area.row === 0 ? WALL_H : PARTITION_WALL_H;
+  const westH = area.gx === 0 ? WALL_H : PARTITION_WALL_H;
 
   const segments: Array<{ key: string; z: number; draw: (g: PixiGraphics) => void }> = [];
 
@@ -154,37 +175,92 @@ function RoomWalls({ area }: { area: AreaLayout }) {
     const p2 = isoToScreen(tx + 1, area.gy);
     const c1 = isoToScreen(tx, area.gy - T);
     const c2 = isoToScreen(tx + 1, area.gy - T);
-    segments.push({
-      key: `n${tx}`,
-      z: isoDepth(tx + 0.5, area.gy) - 0.1,
-      draw: (g) => {
-        g.clear();
-        g.beginFill(north);
-        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
-        g.endFill();
-        g.beginFill(cap);
-        g.drawPolygon([c1.x, c1.y - WALL_H, c2.x, c2.y - WALL_H, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
-        g.endFill();
-      },
-    });
+    if (northDoorCols.has(tx)) {
+      // Doorway through the full-height back wall: side jambs + lintel, with the gap showing the
+      // corridor behind - characters walk through this opening.
+      const j1 = isoToScreen(tx + 0.14, area.gy);
+      const j2 = isoToScreen(tx + 0.86, area.gy);
+      const t1 = isoToScreen(tx + 0.08, area.gy - 0.3);
+      const t2 = isoToScreen(tx + 0.92, area.gy - 0.3);
+      const t3 = isoToScreen(tx + 0.92, area.gy + 0.3);
+      const t4 = isoToScreen(tx + 0.08, area.gy + 0.3);
+      segments.push({
+        key: `n${tx}`,
+        z: isoDepth(tx + 0.5, area.gy) - 0.1,
+        draw: (g) => {
+          g.clear();
+          // Threshold strip on the floor through the opening.
+          g.beginFill(threshold, 0.9);
+          g.drawPolygon([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
+          g.endFill();
+          // Jambs (door frame posts), slightly taller than the wall they interrupt.
+          g.beginFill(doorFrame);
+          g.drawPolygon([p1.x, p1.y, j1.x, j1.y, j1.x, j1.y - northH - 2, p1.x, p1.y - northH - 2]);
+          g.drawPolygon([j2.x, j2.y, p2.x, p2.y, p2.x, p2.y - northH - 2, j2.x, j2.y - northH - 2]);
+          // Lintel across the top (only on full-height walls; partitions stay open above).
+          if (northH === WALL_H) {
+            g.drawPolygon([j1.x, j1.y - northH + LINTEL_H, j2.x, j2.y - northH + LINTEL_H, j2.x, j2.y - northH, j1.x, j1.y - northH]);
+          }
+          g.endFill();
+        },
+      });
+    } else {
+      segments.push({
+        key: `n${tx}`,
+        z: isoDepth(tx + 0.5, area.gy) - 0.1,
+        draw: (g) => {
+          g.clear();
+          g.beginFill(north);
+          g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - northH, p1.x, p1.y - northH]);
+          g.endFill();
+          g.beginFill(cap);
+          g.drawPolygon([c1.x, c1.y - northH, c2.x, c2.y - northH, p2.x, p2.y - northH, p1.x, p1.y - northH]);
+          g.endFill();
+        },
+      });
+    }
 
     const q1 = isoToScreen(tx, area.gy + area.gh);
     const q2 = isoToScreen(tx + 1, area.gy + area.gh);
     const d1 = isoToScreen(tx, area.gy + area.gh + TP);
     const d2 = isoToScreen(tx + 1, area.gy + area.gh + TP);
-    segments.push({
-      key: `s${tx}`,
-      z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
-      draw: (g) => {
-        g.clear();
-        g.beginFill(parapet);
-        g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-        g.endFill();
-        g.beginFill(cap);
-        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-        g.endFill();
-      },
-    });
+    if (southDoorCols.has(tx)) {
+      // Gap in the front parapet: two small post stubs + a threshold strip mark the entrance.
+      const s1 = isoToScreen(tx + 0.16, area.gy + area.gh);
+      const s2 = isoToScreen(tx + 0.84, area.gy + area.gh);
+      const t1 = isoToScreen(tx + 0.08, area.gy + area.gh - 0.3);
+      const t2 = isoToScreen(tx + 0.92, area.gy + area.gh - 0.3);
+      const t3 = isoToScreen(tx + 0.92, area.gy + area.gh + 0.3);
+      const t4 = isoToScreen(tx + 0.08, area.gy + area.gh + 0.3);
+      segments.push({
+        key: `s${tx}`,
+        z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
+        draw: (g) => {
+          g.clear();
+          g.beginFill(threshold, 0.9);
+          g.drawPolygon([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
+          g.endFill();
+          g.beginFill(doorFrame);
+          g.drawPolygon([q1.x, q1.y, s1.x, s1.y, s1.x, s1.y - PARAPET_H - 4, q1.x, q1.y - PARAPET_H - 4]);
+          g.drawPolygon([s2.x, s2.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H - 4, s2.x, s2.y - PARAPET_H - 4]);
+          g.endFill();
+        },
+      });
+    } else {
+      segments.push({
+        key: `s${tx}`,
+        z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
+        draw: (g) => {
+          g.clear();
+          g.beginFill(parapet);
+          g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+          g.endFill();
+          g.beginFill(cap);
+          g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+          g.endFill();
+        },
+      });
+    }
   }
 
   for (let ty = area.gy; ty < area.gy + area.gh; ty += 1) {
@@ -198,10 +274,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
       draw: (g) => {
         g.clear();
         g.beginFill(west);
-        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
+        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - westH, p1.x, p1.y - westH]);
         g.endFill();
         g.beginFill(cap);
-        g.drawPolygon([c1.x, c1.y - WALL_H, c2.x, c2.y - WALL_H, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
+        g.drawPolygon([c1.x, c1.y - westH, c2.x, c2.y - westH, p2.x, p2.y - westH, p1.x, p1.y - westH]);
         g.endFill();
       },
     });
@@ -225,8 +301,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
     });
   }
 
-  // Corner cap where the two full-height back walls meet, closing the top face neatly.
+  // Corner cap where the two back walls meet, closing the top face neatly (at the lower of the
+  // two wall heights when they differ).
   {
+    const cornerH = Math.min(northH, westH);
     const k1 = isoToScreen(area.gx - T, area.gy - T);
     const k2 = isoToScreen(area.gx, area.gy - T);
     const k3 = isoToScreen(area.gx, area.gy);
@@ -237,7 +315,7 @@ function RoomWalls({ area }: { area: AreaLayout }) {
       draw: (g) => {
         g.clear();
         g.beginFill(cap);
-        g.drawPolygon([k1.x, k1.y - WALL_H, k2.x, k2.y - WALL_H, k3.x, k3.y - WALL_H, k4.x, k4.y - WALL_H]);
+        g.drawPolygon([k1.x, k1.y - cornerH, k2.x, k2.y - cornerH, k3.x, k3.y - cornerH, k4.x, k4.y - cornerH]);
         g.endFill();
       },
     });
@@ -277,15 +355,16 @@ function ExteriorWindows({ area }: { area: AreaLayout }) {
   );
 }
 
-/** Furniture at each desk slot, depth-sorted with everything else; a grounding shadow per prop. */
+/** Furniture at its nav-grid cell (the same placements the collision grid marks solid, so what you
+ * see is exactly what blocks walking); depth-sorted with everything else, grounding shadow per prop. */
 function AreaFurniture({ area }: { area: AreaLayout }) {
-  const furniture = AREA_FURNITURE[area.areaId];
-  const props = Array.isArray(furniture) ? furniture : [furniture];
   return (
     <>
-      {areaSlots(area.areaId).map((slot, i) => {
-        const screen = isoToScreen(slot.x, slot.y);
-        const z = isoDepth(slot.x, slot.y);
+      {areaFurniturePlacements(area.areaId).map((placement, i) => {
+        const wx = placement.cell.cx + 0.5;
+        const wy = placement.cell.cy + 0.5;
+        const screen = isoToScreen(wx, wy);
+        const z = isoDepth(wx, wy);
         const drawShadow = (g: PixiGraphics) => {
           g.clear();
           g.beginFill(0x000000, 0.16);
@@ -298,7 +377,7 @@ function AreaFurniture({ area }: { area: AreaLayout }) {
           <Fragment key={i}>
             <Graphics zIndex={z - 0.01} draw={drawShadow} />
             <Sprite
-              texture={FURNITURE_TEXTURES[props[i % props.length]!]}
+              texture={FURNITURE_TEXTURES[placement.prop]}
               x={screen.x}
               y={screen.y + 4}
               anchor={{ x: 0.5, y: 1 }}
@@ -312,43 +391,28 @@ function AreaFurniture({ area }: { area: AreaLayout }) {
   );
 }
 
-/** One extra prop parked against the room's back wall. */
-function AreaAccessory({ area }: { area: AreaLayout }) {
-  const prop = AREA_ACCESSORY[area.areaId];
-  if (!prop) return null;
-  const wx = area.gx + area.gw - 1.2;
-  const wy = area.gy + 0.7;
-  const screen = isoToScreen(wx, wy);
+/** Corner plants and back-wall accessories - drawn from the same collision-tied placements as the
+ * nav grid (STEP8: decorations never silently block a path). */
+function AreaDecor({ area }: { area: AreaLayout }) {
   return (
-    <Sprite
-      texture={FURNITURE_TEXTURES[prop]}
-      x={screen.x}
-      y={screen.y + 4}
-      anchor={{ x: 0.5, y: 1 }}
-      scale={{ x: FURNITURE_SCALE * 0.85, y: FURNITURE_SCALE * 0.85 }}
-      zIndex={isoDepth(wx, wy)}
-    />
-  );
-}
-
-/** A potted plant in the front-left corner of most rooms - cheap interior density (the tech rooms
- * and the break room, which already cycles plants, are left out). */
-const PLANTED_ROOMS = new Set(["library", "research_space", "meeting_room", "pm_space", "dev_floor", "personal_desk", "terminal_room", "qa_room", "deploy_area"]);
-
-function RoomPlant({ area }: { area: AreaLayout }) {
-  if (!PLANTED_ROOMS.has(area.areaId)) return null;
-  const wx = area.gx + 0.75;
-  const wy = area.gy + area.gh - 0.75;
-  const screen = isoToScreen(wx, wy);
-  return (
-    <Sprite
-      texture={FURNITURE_TEXTURES.plant}
-      x={screen.x}
-      y={screen.y + 3}
-      anchor={{ x: 0.5, y: 1 }}
-      scale={{ x: 0.26, y: 0.26 }}
-      zIndex={isoDepth(wx, wy)}
-    />
+    <>
+      {areaDecorPlacements(area.areaId).map((decor, i) => {
+        const wx = decor.cell.cx + 0.5;
+        const wy = decor.cell.cy + 0.5;
+        const screen = isoToScreen(wx, wy);
+        return (
+          <Sprite
+            key={i}
+            texture={FURNITURE_TEXTURES[decor.prop]}
+            x={screen.x}
+            y={screen.y + 3}
+            anchor={{ x: 0.5, y: 1 }}
+            scale={{ x: decor.scale, y: decor.scale }}
+            zIndex={isoDepth(wx, wy)}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -543,10 +607,7 @@ export function OfficeCanvas() {
           <AreaFurniture key={`furniture-${area.areaId}`} area={area} />
         ))}
         {PHASE2_AREA_LAYOUT.map((area) => (
-          <AreaAccessory key={`acc-${area.areaId}`} area={area} />
-        ))}
-        {PHASE2_AREA_LAYOUT.map((area) => (
-          <RoomPlant key={`plant-${area.areaId}`} area={area} />
+          <AreaDecor key={`decor-${area.areaId}`} area={area} />
         ))}
         <ExteriorTrees />
         <CharacterLayer />

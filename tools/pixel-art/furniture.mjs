@@ -459,6 +459,64 @@ function generateWindow() {
   );
 }
 
+// ================================
+// ウォーターサーバー(休憩スペースの生活感、STEP8)
+// ================================
+function generateWaterServer() {
+  const grid = createGrid(18, 30);
+  const cx = 11;
+  const by = 27;
+
+  // 本体
+  isoBox(grid, cx, by, 3, 2, 14, "T", "S", "E");
+  // 注ぎ口パネル
+  southRect(grid, cx, by, 0.5, 2.5, 8, 3, "P");
+  southRect(grid, cx, by, 1, 2, 9, 1, "D");
+  // 上のボトル(青の水タンク)
+  isoBox(grid, cx - 1, by - 14, 2, 1.5, 6, "W", "B", "b");
+
+  save(
+    grid,
+    {
+      T: [237, 232, 220, 255],
+      S: [214, 208, 196, 255],
+      E: [178, 172, 160, 255],
+      P: [120, 128, 138, 255],
+      D: [64, 70, 78, 255],
+      W: [190, 228, 248, 255],
+      B: [125, 195, 235, 255],
+      b: [86, 158, 205, 255],
+    },
+    "water_server"
+  );
+}
+
+// ================================
+// ゴミ箱(STEP8)
+// ================================
+function generateTrash() {
+  const grid = createGrid(14, 16, ".");
+  const cx = 8;
+  const by = 14;
+
+  isoBox(grid, cx, by, 2, 1.5, 7, "T", "S", "E");
+  // 縁とゴミ袋の覗き
+  southRect(grid, cx, by, 0.2, 1.8, 6, 1, "R");
+  fillRect(grid, 3, 5, 4, 2, "W");
+
+  save(
+    grid,
+    {
+      T: [110, 120, 130, 255],
+      S: [90, 99, 108, 255],
+      E: [67, 75, 83, 255],
+      R: [140, 150, 160, 255],
+      W: [237, 232, 220, 255],
+    },
+    "trash"
+  );
+}
+
 export function generateFurniture() {
   generateDesk();
   generateBookshelf();
@@ -472,11 +530,14 @@ export function generateFurniture() {
   generatePlant();
   generateReceptionDesk();
   generateWindow();
+  generateWaterServer();
+  generateTrash();
 
   console.log(`
 Generated ISOMETRIC furniture props:
 desk / bookshelf / server / cabinet / couch / vending_machine /
-whiteboard / monitor_wall / conference_table / plant / reception / window
+whiteboard / monitor_wall / conference_table / plant / reception / window /
+water_server / trash
 (全てボクセル調: 天面+南面+東面の3面構成)
 `);
 }
