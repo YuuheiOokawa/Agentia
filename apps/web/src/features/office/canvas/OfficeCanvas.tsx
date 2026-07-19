@@ -25,7 +25,8 @@ const AREA_LABEL_STYLE = new TextStyle({ fontSize: 12, fontWeight: "700", fill: 
 const STEP_LABEL_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff, stroke: 0x1a2b45, strokeThickness: 3 });
 const STEP_NUMBER_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff });
 
-const FURNITURE_SCALE = 0.34;
+/** The new isometric voxel props are drawn on smaller grids than the old flat billboards. */
+const FURNITURE_SCALE = 0.5;
 const WINDOW_SCALE = 0.26;
 
 /** Traces one floor tile's diamond at world tile (tx, ty). */
@@ -108,6 +109,19 @@ function RoomFloor({ area }: { area: AreaLayout }) {
     g.beginFill(0x000000, 0.09);
     g.drawPolygon([w1.x, w1.y, w2.x, w2.y, w3.x, w3.y, w4.x, w4.y]);
     g.endFill();
+
+    // Daylight pools slanting in from the exterior windows (topmost band only).
+    if (area.row === 0) {
+      for (const wx of [area.gx + 1, area.gx + area.gw - 2.4]) {
+        const l1 = isoToScreen(wx - 0.1, area.gy);
+        const l2 = isoToScreen(wx + 1.3, area.gy);
+        const l3 = isoToScreen(wx + 1.9, area.gy + 1.7);
+        const l4 = isoToScreen(wx + 0.5, area.gy + 1.7);
+        g.beginFill(0xffffff, 0.12);
+        g.drawPolygon([l1.x, l1.y, l2.x, l2.y, l3.x, l3.y, l4.x, l4.y]);
+        g.endFill();
+      }
+    }
   };
   return <Graphics zIndex={-500} draw={draw} />;
 }

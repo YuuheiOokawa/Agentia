@@ -29,6 +29,35 @@ export function fillEllipse(grid, cx, cy, rx, ry, ch) {
   }
 }
 
+/** Scanline fill of an arbitrary polygon (array of [x, y] points), used for isometric box faces. */
+export function fillPolygon(grid, points, ch) {
+  const height = grid.length;
+  const width = grid[0].length;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [, py] of points) {
+    minY = Math.min(minY, py);
+    maxY = Math.max(maxY, py);
+  }
+  for (let y = Math.max(0, Math.floor(minY)); y <= Math.min(height - 1, Math.ceil(maxY)); y += 1) {
+    const yc = y + 0.5;
+    const xs = [];
+    for (let i = 0; i < points.length; i += 1) {
+      const [x1, y1] = points[i];
+      const [x2, y2] = points[(i + 1) % points.length];
+      if ((y1 <= yc && y2 > yc) || (y2 <= yc && y1 > yc)) {
+        xs.push(x1 + ((yc - y1) / (y2 - y1)) * (x2 - x1));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const xStart = Math.max(0, Math.ceil(xs[k] - 0.5));
+      const xEnd = Math.min(width - 1, Math.floor(xs[k + 1] - 0.5));
+      for (let x = xStart; x <= xEnd; x += 1) grid[y][x] = ch;
+    }
+  }
+}
+
 export function gridToStrings(grid) {
   return grid.map((row) => row.join(""));
 }
