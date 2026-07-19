@@ -1,66 +1,183 @@
 "use client";
 
-import { Stage, Container, Graphics, Sprite, TilingSprite, Text } from "@pixi/react";
-import { TextStyle, type Graphics as PixiGraphics } from "pixi.js";
+import { Fragment } from "react";
+import { Stage, Container, Graphics, Sprite, Text } from "@pixi/react";
+import { TextMetrics, TextStyle, type Graphics as PixiGraphics } from "pixi.js";
 import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
+import { AREA_ACCESSORY, AREA_FURNITURE, areaSlots, PHASE2_AREA_LAYOUT, type AreaLayout } from "../map/map";
 import {
-  AREA_ACCESSORY,
-  AREA_FURNITURE,
-  areaDepthFraction,
-  areaSlots,
-  depthScale,
+  GRID_COLS,
+  GRID_ROWS,
+  isoDepth,
+  isoToScreen,
+  NORTH_WALL_SKEW_Y,
   OFFICE_HEIGHT,
   OFFICE_WIDTH,
-  PHASE2_AREA_LAYOUT,
-  roomDividers,
-  type AreaLayout,
-} from "../map/map";
+  PARAPET_H,
+  WALL_H,
+} from "../map/iso";
 import { CharacterSprite } from "../characters/CharacterSprite";
-import { FLOOR_EDGE_TEXTURE, FLOOR_TEXTURE, FURNITURE_TEXTURES, PARTITION_TEXTURE, WALL_TEXTURE, WINDOW_TEXTURE } from "../pixel-assets";
+import { FURNITURE_TEXTURES, WINDOW_TEXTURE } from "../pixel-assets";
 
-const AREA_LABEL_STYLE = new TextStyle({
-  fontSize: 12,
-  fontWeight: "700",
-  fill: 0xffffff,
-  stroke: 0x000000,
-  strokeThickness: 3,
-});
+const AREA_LABEL_STYLE = new TextStyle({ fontSize: 12, fontWeight: "700", fill: 0xffffff });
+const STEP_LABEL_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff, stroke: 0x1a2b45, strokeThickness: 3 });
+const STEP_NUMBER_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff });
 
-const WALL_HEIGHT = 22;
-const FURNITURE_SCALE = 0.65;
-/** Fixed literal, not computed from WINDOW_TEXTURE.width/height: PIXI textures report a placeholder
- * size before their image finishes loading, and a plain Sprite's rendered size is nativeSize*scale
- * with nothing to bound it - computing scale from a not-yet-loaded texture's dimensions makes the
- * sprite balloon to fill the stage once the real image loads in. (TilingSprite's tileScale doesn't
- * have this problem since its own explicit width/height always bounds the render regardless.) */
-const WINDOW_SCALE = 0.3;
-const WINDOW_SPACING_PX = 34;
-/** Discretized (not smooth-gradient) shading bands, to fit the pixel-art aesthetic elsewhere -
- * darkest near the back wall, fading out toward the front, faking depth in an otherwise flat
- * top-down floor plan (docs/07 "3Dな感じ"). */
-const FLOOR_DEPTH_BANDS = 4;
-const SIDE_SHADE_WIDTH_PX = 10;
+const FURNITURE_SCALE = 0.34;
+const WINDOW_SCALE = 0.26;
 
-/** Pixel-art furniture props parked at each area's desk slots, so rooms read as real workspaces (docs/10 #2).
- * A room can list several props (docs/07 "会社みたいに") - they cycle across slots by index instead of
- * repeating one prop everywhere. Each slot's scale is nudged by its depth in the room (docs/07 "3Dな感じ") -
- * furniture nearer the back wall renders a little smaller than furniture nearer the viewer. */
-function AreaFurniture({ area }: { area: AreaLayout }) {
-  const furniture = AREA_FURNITURE[area.areaId];
-  const props = Array.isArray(furniture) ? furniture : [furniture];
+/** Traces one floor tile's diamond at world tile (tx, ty). */
+function tileDiamond(g: PixiGraphics, tx: number, ty: number): void {
+  const top = isoToScreen(tx, ty);
+  const right = isoToScreen(tx + 1, ty);
+  const bottom = isoToScreen(tx + 1, ty + 1);
+  const left = isoToScreen(tx, ty + 1);
+  g.drawPolygon([top.x, top.y, right.x, right.y, bottom.x, bottom.y, left.x, left.y]);
+}
+
+/** Neutral checkerboard under the whole grid - corridors and the ground rooms sit on. */
+function BaseFloor() {
+  const draw = (g: PixiGraphics) => {
+    g.clear();
+    for (let ty = 0; ty < GRID_ROWS; ty += 1) {
+      for (let tx = 0; tx < GRID_COLS; tx += 1) {
+        g.beginFill((tx + ty) % 2 === 0 ? 0xd9d6cf : 0xcfccc4);
+        tileDiamond(g, tx, ty);
+        g.endFill();
+      }
+    }
+  };
+  return <Graphics zIndex={-1000} draw={draw} />;
+}
+
+/** A room's colored checker floor (two lightened shades of its accent color). */
+function RoomFloor({ area }: { area: AreaLayout }) {
+  const shadeA = lightenColor(area.color, 0.76);
+  const shadeB = lightenColor(area.color, 0.68);
+  const draw = (g: PixiGraphics) => {
+    g.clear();
+    for (let ty = area.gy; ty < area.gy + area.gh; ty += 1) {
+      for (let tx = area.gx; tx < area.gx + area.gw; tx += 1) {
+        g.beginFill((tx + ty) % 2 === 0 ? shadeA : shadeB);
+        tileDiamond(g, tx, ty);
+        g.endFill();
+      }
+    }
+  };
+  return <Graphics zIndex={-500} draw={draw} />;
+}
+
+/**
+ * Room walls as per-tile segments so painter's sorting works: a character standing in front of a
+ * wall segment (greater world depth) draws over it, one standing behind it (in a corridor/other
+ * room) is hidden by it. North/west walls are full height, front/east walls are low parapets so
+ * every room reads as an open box you look into - same construction as the reference image.
+ */
+function RoomWalls({ area }: { area: AreaLayout }) {
+  // Noticeably more saturated than the floor (lighten 0.45 vs 0.68-0.76) so wall faces read as
+  // vertical surfaces instead of blending into the floor they sit on.
+  const base = lightenColor(area.color, 0.45);
+  const north = base;
+  const west = shadeColor(base, 0.75);
+  const parapet = shadeColor(base, 0.9);
+  const parapetSide = shadeColor(base, 0.72);
+  const trim = lightenColor(base, 0.55);
+
+  const segments: Array<{ key: string; z: number; draw: (g: PixiGraphics) => void }> = [];
+
+  for (let tx = area.gx; tx < area.gx + area.gw; tx += 1) {
+    const p1 = isoToScreen(tx, area.gy);
+    const p2 = isoToScreen(tx + 1, area.gy);
+    segments.push({
+      key: `n${tx}`,
+      z: isoDepth(tx + 0.5, area.gy) - 0.1,
+      draw: (g) => {
+        g.clear();
+        g.beginFill(north);
+        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
+        g.endFill();
+        g.beginFill(trim);
+        g.drawPolygon([p1.x, p1.y - WALL_H, p2.x, p2.y - WALL_H, p2.x, p2.y - WALL_H + 3, p1.x, p1.y - WALL_H + 3]);
+        g.endFill();
+      },
+    });
+
+    const q1 = isoToScreen(tx, area.gy + area.gh);
+    const q2 = isoToScreen(tx + 1, area.gy + area.gh);
+    segments.push({
+      key: `s${tx}`,
+      z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
+      draw: (g) => {
+        g.clear();
+        g.beginFill(parapet);
+        g.drawPolygon([q1.x, q1.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H, q1.x, q1.y - PARAPET_H]);
+        g.endFill();
+        g.beginFill(trim);
+        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, q2.x, q2.y - PARAPET_H + 2, q1.x, q1.y - PARAPET_H + 2]);
+        g.endFill();
+      },
+    });
+  }
+
+  for (let ty = area.gy; ty < area.gy + area.gh; ty += 1) {
+    const p1 = isoToScreen(area.gx, ty);
+    const p2 = isoToScreen(area.gx, ty + 1);
+    segments.push({
+      key: `w${ty}`,
+      z: isoDepth(area.gx, ty + 0.5) - 0.1,
+      draw: (g) => {
+        g.clear();
+        g.beginFill(west);
+        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - WALL_H, p1.x, p1.y - WALL_H]);
+        g.endFill();
+        g.beginFill(trim);
+        g.drawPolygon([p1.x, p1.y - WALL_H, p2.x, p2.y - WALL_H, p2.x, p2.y - WALL_H + 3, p1.x, p1.y - WALL_H + 3]);
+        g.endFill();
+      },
+    });
+
+    const q1 = isoToScreen(area.gx + area.gw, ty);
+    const q2 = isoToScreen(area.gx + area.gw, ty + 1);
+    segments.push({
+      key: `e${ty}`,
+      z: isoDepth(area.gx + area.gw, ty + 0.5) - 0.1,
+      draw: (g) => {
+        g.clear();
+        g.beginFill(parapetSide);
+        g.drawPolygon([q1.x, q1.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H, q1.x, q1.y - PARAPET_H]);
+        g.endFill();
+      },
+    });
+  }
+
   return (
     <>
-      {areaSlots(area.areaId).map((slot, i) => {
-        const scale = FURNITURE_SCALE * depthScale(areaDepthFraction(area.areaId, slot.y));
+      {segments.map((s) => (
+        <Graphics key={s.key} zIndex={s.z} draw={s.draw} />
+      ))}
+    </>
+  );
+}
+
+/** Windows skewed onto the back walls of the topmost band (the building's exterior wall). */
+function ExteriorWindows({ area }: { area: AreaLayout }) {
+  if (area.row !== 0) return null;
+  const positions = [area.gx + 1, area.gx + area.gw - 2.4];
+  return (
+    <>
+      {positions.map((tx, i) => {
+        const base = isoToScreen(tx, area.gy);
         return (
           <Sprite
             key={i}
-            texture={FURNITURE_TEXTURES[props[i % props.length]!]}
-            x={slot.x}
-            y={slot.y + 6}
-            anchor={{ x: 0.5, y: 1 }}
-            scale={{ x: scale, y: scale }}
+            texture={WINDOW_TEXTURE}
+            x={base.x}
+            y={base.y - 9}
+            anchor={{ x: 0, y: 1 }}
+            skew={{ x: 0, y: NORTH_WALL_SKEW_Y }}
+            scale={{ x: WINDOW_SCALE, y: WINDOW_SCALE }}
+            zIndex={isoDepth(tx + 0.5, area.gy) - 0.05}
           />
         );
       })}
@@ -68,179 +185,155 @@ function AreaFurniture({ area }: { area: AreaLayout }) {
   );
 }
 
-/** Drop shadow under every furniture slot, grounding props on the floor the same way characters
- * already have one - static per room (furniture never moves), so a single Graphics draw suffices. */
-function FurnitureShadows({ area }: { area: AreaLayout }) {
-  const draw = (g: PixiGraphics) => {
-    g.clear();
-    for (const slot of areaSlots(area.areaId)) {
-      const scale = depthScale(areaDepthFraction(area.areaId, slot.y));
-      g.beginFill(0x000000, 0.16);
-      g.drawEllipse(slot.x, slot.y + 6, 13 * scale, 4 * scale);
-      g.endFill();
-    }
-  };
-  return <Graphics draw={draw} />;
-}
-
-/** One extra prop in the room's bottom-right corner (docs/07 "会社みたいに") - never at a desk slot, so it
- * never competes with character placement (areaSlotFor uses the same slot list for both). */
-function AreaAccessory({ area }: { area: AreaLayout }) {
-  const prop = AREA_ACCESSORY[area.areaId];
-  if (!prop) return null;
-  const y = area.y + area.height - 12;
-  const scale = FURNITURE_SCALE * 0.85 * depthScale(areaDepthFraction(area.areaId, y));
-  return (
-    <Sprite
-      texture={FURNITURE_TEXTURES[prop]}
-      x={area.x + area.width - 20}
-      y={y}
-      anchor={{ x: 1, y: 1 }}
-      scale={{ x: scale, y: scale }}
-    />
-  );
-}
-
-/** Floor shading bands (darker at the back, fading toward the front) plus a subtle side vignette,
- * so each room reads as a real box with depth instead of a flat tinted rectangle (docs/07 "3Dな感じ"). */
-function RoomDepthShading({ area }: { area: AreaLayout }) {
-  const draw = (g: PixiGraphics) => {
-    g.clear();
-    const topPad = 40;
-    const floorTop = area.y + topPad;
-    const floorHeight = area.height - topPad;
-    const bandHeight = floorHeight / FLOOR_DEPTH_BANDS;
-    for (let i = 0; i < FLOOR_DEPTH_BANDS; i += 1) {
-      const fraction = i / (FLOOR_DEPTH_BANDS - 1);
-      const alpha = 0.16 * (1 - fraction);
-      if (alpha <= 0.01) continue;
-      g.beginFill(0x000000, alpha);
-      g.drawRect(area.x, floorTop + bandHeight * i, area.width, bandHeight + 1);
-      g.endFill();
-    }
-    g.beginFill(0x000000, 0.14);
-    g.drawRect(area.x, area.y, SIDE_SHADE_WIDTH_PX, area.height);
-    g.drawRect(area.x + area.width - SIDE_SHADE_WIDTH_PX, area.y, SIDE_SHADE_WIDTH_PX, area.height);
-    g.endFill();
-  };
-  return <Graphics draw={draw} />;
-}
-
-/** A bright trim line along the top of the wall band, like a ceiling/cornice edge catching the light -
- * a cheap but effective "this wall has real height" cue (docs/07 "3Dな感じ"). */
-function WallCornice({ area }: { area: AreaLayout }) {
-  const draw = (g: PixiGraphics) => {
-    g.clear();
-    g.beginFill(0xffffff, 0.35);
-    g.drawRect(area.x, area.y - WALL_HEIGHT + 3, area.width, 2);
-    g.endFill();
-  };
-  return <Graphics draw={draw} />;
-}
-
-function AreaRoom({ area }: { area: AreaLayout }) {
-  const floorTint = lightenColor(area.color, 0.72);
-  const wallTint = shadeColor(lightenColor(area.color, 0.55), 0.92);
-
+/** Furniture at each desk slot, depth-sorted with everything else; a grounding shadow per prop. */
+function AreaFurniture({ area }: { area: AreaLayout }) {
+  const furniture = AREA_FURNITURE[area.areaId];
+  const props = Array.isArray(furniture) ? furniture : [furniture];
   return (
     <>
-      <TilingSprite
-        texture={FLOOR_TEXTURE}
-        x={area.x}
-        y={area.y}
-        width={area.width}
-        height={area.height}
-        tilePosition={{ x: 0, y: 0 }}
-        tileScale={{ x: 2, y: 2 }}
-        tint={floorTint}
-      />
-      <RoomDepthShading area={area} />
-      <TilingSprite
-        texture={WALL_TEXTURE}
-        x={area.x}
-        y={area.y - WALL_HEIGHT + 4}
-        width={area.width}
-        height={WALL_HEIGHT}
-        tilePosition={{ x: 0, y: 0 }}
-        tileScale={{ x: 2, y: WALL_HEIGHT / WALL_TEXTURE.height }}
-        tint={wallTint}
-      />
-      <WallCornice area={area} />
-      <FurnitureShadows area={area} />
-      <AreaFurniture area={area} />
-      <AreaAccessory area={area} />
-      <Text text={`${area.icon} ${area.name}`} x={area.x + 8} y={area.y - WALL_HEIGHT + 6} style={AREA_LABEL_STYLE} />
-    </>
-  );
-}
-
-/** Fills the gaps between rooms so borders read as real corridors/walls instead of bare stage background
- * showing through (docs/07 "部屋同士の境界をはっきりさせる") - rendered under the rooms themselves. */
-function RoomDividers() {
-  const { partitions, floorEdges } = roomDividers();
-  return (
-    <>
-      {floorEdges.map((edge, i) => (
-        <TilingSprite
-          key={`edge-${i}`}
-          texture={FLOOR_EDGE_TEXTURE}
-          x={edge.x}
-          y={edge.y}
-          width={edge.width}
-          height={edge.height}
-          tilePosition={{ x: 0, y: 0 }}
-          tileScale={{ x: 1, y: edge.height / FLOOR_EDGE_TEXTURE.height }}
-        />
-      ))}
-      {partitions.map((p, i) => (
-        <TilingSprite
-          key={`partition-${i}`}
-          texture={PARTITION_TEXTURE}
-          x={p.x}
-          y={p.y}
-          width={p.width}
-          height={p.height}
-          tilePosition={{ x: 0, y: 0 }}
-          tileScale={{ x: p.width / PARTITION_TEXTURE.width, y: p.width / PARTITION_TEXTURE.width }}
-        />
-      ))}
-    </>
-  );
-}
-
-/** Windows on the topmost row's walls only (docs/07 "会社みたいに") - those are the office's exterior-facing
- * walls, everything else backs onto another room. A fixed-color overlay on top of the tinted wall band,
- * same as furniture never being tinted by its room's accent color. Anchored to each room's right edge,
- * growing leftward, so they never collide with the left-aligned room-name label in the same wall band. */
-function ExteriorWindows() {
-  const exteriorAreas = PHASE2_AREA_LAYOUT.filter((area) => area.row === 0);
-  return (
-    <>
-      {exteriorAreas.flatMap((area) => {
-        const count = area.width > 200 ? 2 : 1;
-        return Array.from({ length: count }, (_, i) => (
-          <Sprite
-            key={`${area.areaId}-window-${i}`}
-            texture={WINDOW_TEXTURE}
-            x={area.x + area.width - 12 - i * WINDOW_SPACING_PX}
-            y={area.y - WALL_HEIGHT + 3}
-            anchor={{ x: 1, y: 0 }}
-            scale={{ x: WINDOW_SCALE, y: WINDOW_SCALE }}
-          />
-        ));
+      {areaSlots(area.areaId).map((slot, i) => {
+        const screen = isoToScreen(slot.x, slot.y);
+        const z = isoDepth(slot.x, slot.y);
+        const drawShadow = (g: PixiGraphics) => {
+          g.clear();
+          g.beginFill(0x000000, 0.16);
+          g.drawEllipse(screen.x, screen.y + 2, 16, 5);
+          g.endFill();
+        };
+        // Direct siblings of the sortable world container (a wrapper Container would collapse
+        // their depth to zIndex 0 and break occlusion against characters).
+        return (
+          <Fragment key={i}>
+            <Graphics zIndex={z - 0.01} draw={drawShadow} />
+            <Sprite
+              texture={FURNITURE_TEXTURES[props[i % props.length]!]}
+              x={screen.x}
+              y={screen.y + 4}
+              anchor={{ x: 0.5, y: 1 }}
+              scale={{ x: FURNITURE_SCALE, y: FURNITURE_SCALE }}
+              zIndex={z}
+            />
+          </Fragment>
+        );
       })}
     </>
   );
 }
 
-function OfficeFloor() {
+/** One extra prop parked against the room's back wall. */
+function AreaAccessory({ area }: { area: AreaLayout }) {
+  const prop = AREA_ACCESSORY[area.areaId];
+  if (!prop) return null;
+  const wx = area.gx + area.gw - 1.2;
+  const wy = area.gy + 0.7;
+  const screen = isoToScreen(wx, wy);
+  return (
+    <Sprite
+      texture={FURNITURE_TEXTURES[prop]}
+      x={screen.x}
+      y={screen.y + 4}
+      anchor={{ x: 0.5, y: 1 }}
+      scale={{ x: FURNITURE_SCALE * 0.85, y: FURNITURE_SCALE * 0.85 }}
+      zIndex={isoDepth(wx, wy)}
+    />
+  );
+}
+
+/** Kairosoft-style name plate floating over each room. Anchored at the room's own center (not its
+ * back wall, whose screen position is ambiguous between the room and its rear neighbor in iso),
+ * and clamped to the stage so edge rooms' plates never clip off-screen. */
+function RoomLabel({ area }: { area: AreaLayout }) {
+  const text = `${area.icon} ${area.name}`;
+  const metrics = TextMetrics.measureText(text, AREA_LABEL_STYLE);
+  const anchor = isoToScreen(area.gx + area.gw / 2, area.gy + area.gh / 2);
+  const w = metrics.width + 16;
+  const h = metrics.height + 8;
+  const x = Math.min(Math.max(anchor.x - w / 2, 4), OFFICE_WIDTH - w - 4);
+  const y = anchor.y - 44;
+  const draw = (g: PixiGraphics) => {
+    g.clear();
+    g.beginFill(shadeColor(area.color, 0.45), 0.95);
+    g.drawRoundedRect(x, y, w, h, 6);
+    g.endFill();
+  };
   return (
     <>
-      <RoomDividers />
-      {PHASE2_AREA_LAYOUT.map((area) => (
-        <AreaRoom key={area.areaId} area={area} />
-      ))}
-      <ExteriorWindows />
+      <Graphics draw={draw} />
+      <Text text={text} x={x + 8} y={y + 4} style={AREA_LABEL_STYLE} />
+    </>
+  );
+}
+
+/** The five numbered workflow steps from the reference image, laid along the walk corridors. */
+const FLOW_STEPS = [
+  { n: "1", label: "計画・設計", wx: 8.5, wy: 4.5 },
+  { n: "2", label: "開発・実装", wx: 4, wy: 10.5 },
+  { n: "3", label: "テスト・検証", wx: 6, wy: 15.5 },
+  { n: "4", label: "レビュー・QA", wx: 15, wy: 15.5 },
+  { n: "5", label: "完了・リリース", wx: 19.5, wy: 17.4 },
+] as const;
+
+const FLOW_LINES = [
+  { from: { x: 3, y: 4.5 }, to: { x: 24.5, y: 4.5 } },
+  { from: { x: 3, y: 10.5 }, to: { x: 24.5, y: 10.5 } },
+  { from: { x: 3, y: 15.5 }, to: { x: 24.5, y: 15.5 } },
+  { from: { x: 20.5, y: 4.5 }, to: { x: 20.5, y: 15.5 } },
+] as const;
+
+function drawDashedWorldLine(
+  g: PixiGraphics,
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): void {
+  const a = isoToScreen(from.x, from.y);
+  const b = isoToScreen(to.x, to.y);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const ux = dx / len;
+  const uy = dy / len;
+  let d = 0;
+  while (d < len - 12) {
+    const e = Math.min(d + 10, len - 12);
+    g.moveTo(a.x + ux * d, a.y + uy * d);
+    g.lineTo(a.x + ux * e, a.y + uy * e);
+    d = e + 7;
+  }
+  g.lineStyle(0);
+  g.beginFill(0xeaf2ff, 0.9);
+  g.drawPolygon([b.x, b.y, b.x - ux * 12 + -uy * 5, b.y - uy * 12 + ux * 5, b.x - ux * 12 - -uy * 5, b.y - uy * 12 - ux * 5]);
+  g.endFill();
+  g.lineStyle(3, 0xeaf2ff, 0.9);
+}
+
+/** Corridor flow arrows + numbered step badges (reference image's ①〜⑤ workflow overlay). */
+function FlowOverlay() {
+  const drawLines = (g: PixiGraphics) => {
+    g.clear();
+    g.lineStyle(3, 0xeaf2ff, 0.9);
+    for (const line of FLOW_LINES) drawDashedWorldLine(g, line.from, line.to);
+  };
+  return (
+    <>
+      <Graphics draw={drawLines} />
+      {FLOW_STEPS.map((step) => {
+        const p = isoToScreen(step.wx, step.wy);
+        const drawBadge = (g: PixiGraphics) => {
+          g.clear();
+          g.lineStyle(2, 0xffffff, 1);
+          g.beginFill(0x2f6fed);
+          g.drawCircle(p.x, p.y, 10);
+          g.endFill();
+        };
+        return (
+          <Container key={step.n}>
+            <Graphics draw={drawBadge} />
+            <Text text={step.n} x={p.x} y={p.y} anchor={0.5} style={STEP_NUMBER_STYLE} />
+            <Text text={step.label} x={p.x + 15} y={p.y} anchor={{ x: 0, y: 0.5 }} style={STEP_LABEL_STYLE} />
+          </Container>
+        );
+      })}
     </>
   );
 }
@@ -256,13 +349,38 @@ function CharacterLayer() {
   );
 }
 
-/** docs/10_OFFICE_SYSTEM.md: fixed single-floor office (Phase 2: full 12 areas) rendered with PixiJS (docs/03 #4 tech choice). */
+/**
+ * docs/10_OFFICE_SYSTEM.md + docs/07 "カイロソフト風": the full 12-area floor rendered as a true
+ * isometric diorama - diamond floor grid, height-cut walls with painter's-algorithm occlusion,
+ * corridor arrows and floating name plates, with all movement happening in world (tile) space.
+ */
 export function OfficeCanvas() {
   return (
-    <Stage width={OFFICE_WIDTH} height={OFFICE_HEIGHT} options={{ backgroundColor: 0xdfe6ee, antialias: false }}>
-      <Container>
-        <OfficeFloor />
+    <Stage width={OFFICE_WIDTH} height={OFFICE_HEIGHT} options={{ backgroundColor: 0xedeef2, antialias: false }}>
+      <Container sortableChildren>
+        <BaseFloor />
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <RoomFloor key={`floor-${area.areaId}`} area={area} />
+        ))}
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <RoomWalls key={`walls-${area.areaId}`} area={area} />
+        ))}
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <ExteriorWindows key={`win-${area.areaId}`} area={area} />
+        ))}
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <AreaFurniture key={`furniture-${area.areaId}`} area={area} />
+        ))}
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <AreaAccessory key={`acc-${area.areaId}`} area={area} />
+        ))}
         <CharacterLayer />
+      </Container>
+      <Container>
+        <FlowOverlay />
+        {PHASE2_AREA_LAYOUT.map((area) => (
+          <RoomLabel key={`label-${area.areaId}`} area={area} />
+        ))}
       </Container>
     </Stage>
   );

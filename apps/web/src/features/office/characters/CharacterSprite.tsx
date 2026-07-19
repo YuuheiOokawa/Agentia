@@ -5,29 +5,28 @@ import { Container, Graphics, Sprite, Text } from "@pixi/react";
 import { useTick } from "@pixi/react";
 import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics, type Sprite as PixiSprite } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
-import { areaDepthFraction, areaSlotFor, areaWanderBounds, depthScale, pathToArea } from "../map/map";
+import { areaSlotFor, areaWanderBounds, pathToArea } from "../map/map";
+import { isoDepth, isoToScreen } from "../map/iso";
 import { CHARACTER_TEXTURES, poseForState, type Facing } from "../pixel-assets";
 
-const WALK_SPEED_PX_PER_MS = 0.11;
-const ARRIVAL_EPSILON_PX = 1.5;
+/** Movement now happens in WORLD (tile) units - see iso.ts; rendering converts per tick. */
+const WALK_SPEED_TILES_PER_MS = 0.005;
+const ARRIVAL_EPSILON_TILES = 0.08;
 /** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam their whole room
  * every few seconds instead of standing frozen at their desk - this is purely a rendering-layer
- * flourish, not store state. Short delays so the office always has someone visibly moving, closer
- * to how busy a Kairosoft office floor reads. */
+ * flourish, not store state. */
 const WANDER_MIN_DELAY_MS = 900;
 const WANDER_MAX_DELAY_MS = 2600;
-/** Below this vertical speed, a moving character keeps its current facing instead of flickering
- * between front/back on near-horizontal movement. */
-const FACING_DEADZONE_PX = 1.5;
+/** World-space deadzone below which the facing/mirror keeps its previous value, so near-diagonal
+ * movement doesn't flicker between front/back or left/right every frame. */
+const DIRECTION_DEADZONE = 0.25;
 
-/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x (docs: real bitmap assets, not vector shapes).
- * 0.272 (not 0.34) keeps the on-screen footprint the same as the old 16x20@6x sprites (120*0.272 == 96*0.34),
- * since the larger source art is meant to add detail, not make characters bigger relative to desks/rooms. */
-const SPRITE_SCALE = 0.272;
+/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x; scaled so a character stands about
+ * 1.4 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
+const SPRITE_SCALE = 0.21;
 
-const ICON_STYLE = new TextStyle({ fontSize: 13 });
-const NAME_STYLE = new TextStyle({ fontSize: 11, fill: 0x1a1d23, fontWeight: "600" });
-const TASK_STYLE = new TextStyle({ fontSize: 10, fill: 0x6b7280, wordWrap: true, wordWrapWidth: 150 });
+const ICON_STYLE = new TextStyle({ fontSize: 12 });
+const NAME_STYLE = new TextStyle({ fontSize: 10, fill: 0x1a1d23, fontWeight: "600", stroke: 0xffffff, strokeThickness: 3 });
 
 const ROLE_COLOR: Record<string, number> = {
   main: 0x1e88e5,
@@ -78,13 +77,16 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const bodySpriteRef = useRef<PixiSprite | null>(null);
   const detailsSpriteRef = useRef<PixiSprite | null>(null);
   const shadowRef = useRef<PixiGraphics | null>(null);
+  /** Current position in world tiles. */
   const posRef = useRef({ ...initialPos });
   const pathRef = useRef<Array<{ x: number; y: number }>>([]);
   const lastAreaIdRef = useRef<AreaId>(employee.areaId);
   const wanderDeadlineRef = useRef<number>(Date.now() + WANDER_MIN_DELAY_MS + Math.random() * 1500);
   const clockRef = useRef(Math.random() * 1000);
-  /** Which way the character last faced - "back" while walking up/away, "front" otherwise. */
+  /** "back" while walking away from the viewer (screen-up), "front" otherwise. */
   const facingRef = useRef<Facing>("front");
+  /** -1 mirrors the sprite while walking screen-left, +1 while walking screen-right. */
+  const mirrorRef = useRef<1 | -1>(1);
 
   useTick((delta) => {
     clockRef.current += delta;
@@ -99,19 +101,22 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     const next = pathRef.current[0];
     if (next) {
       const dist = distance(posRef.current, next);
-      if (dist < ARRIVAL_EPSILON_PX) {
+      if (dist < ARRIVAL_EPSILON_TILES) {
         pathRef.current = pathRef.current.slice(1);
       } else {
         moving = true;
+        const dx = next.x - posRef.current.x;
         const dy = next.y - posRef.current.y;
-        if (dy < -FACING_DEADZONE_PX) facingRef.current = "back";
-        else if (dy > FACING_DEADZONE_PX) facingRef.current = "front";
-        const step = Math.min(dist, WALK_SPEED_PX_PER_MS * delta * 16.6667);
+        // Screen-vertical component of the direction is (dx+dy), screen-horizontal is (dx-dy).
+        const screenDown = dx + dy;
+        const screenRight = dx - dy;
+        if (screenDown < -DIRECTION_DEADZONE) facingRef.current = "back";
+        else if (screenDown > DIRECTION_DEADZONE) facingRef.current = "front";
+        if (screenRight < -DIRECTION_DEADZONE) mirrorRef.current = -1;
+        else if (screenRight > DIRECTION_DEADZONE) mirrorRef.current = 1;
+        const step = Math.min(dist, WALK_SPEED_TILES_PER_MS * delta * 16.6667);
         const ratio = step / dist;
-        posRef.current = {
-          x: posRef.current.x + (next.x - posRef.current.x) * ratio,
-          y: posRef.current.y + (next.y - posRef.current.y) * ratio,
-        };
+        posRef.current = { x: posRef.current.x + dx * ratio, y: posRef.current.y + dy * ratio };
       }
     } else if (WANDERABLE_STATES.has(employee.state) && Date.now() > wanderDeadlineRef.current) {
       const bounds = areaWanderBounds(employee.areaId);
@@ -122,34 +127,35 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     if (!moving) facingRef.current = "front";
 
     if (outerRef.current) {
-      outerRef.current.position.set(posRef.current.x, posRef.current.y);
+      const screen = isoToScreen(posRef.current.x, posRef.current.y);
+      outerRef.current.position.set(screen.x, screen.y);
+      // Live painter's-algorithm depth so the character sorts correctly against walls/furniture.
+      outerRef.current.zIndex = isoDepth(posRef.current.x, posRef.current.y) + 0.02;
     }
+
     const t = clockRef.current * 0.001;
     /** 0..1 walk-cycle phase while moving, so the bounce/sway/shadow-squash all stay in lockstep
      * (a proper "footstep" feel instead of independent wobbles), and settle back to neutral (0)
      * the instant the character stops. */
     const stepPhase = moving ? Math.abs(Math.sin(t * 13)) : 0;
-    /** Characters nearer the room's back wall render a little smaller, nearer the viewer a little
-     * bigger - the same depth illusion applied to furniture (docs/07 "3Dな感じ"), kept in sync with
-     * position every tick since (unlike furniture) a character's y constantly changes. */
-    const depth = depthScale(areaDepthFraction(employee.areaId, posRef.current.y));
 
     if (bodyGroupRef.current) {
+      const sx = SPRITE_SCALE * mirrorRef.current;
       if (moving) {
-        bodyGroupRef.current.scale.set(SPRITE_SCALE * depth, SPRITE_SCALE * depth * (1 + Math.sin(t * 26) * 0.06));
-        bodyGroupRef.current.position.y = 3 - stepPhase * 3;
-        bodyGroupRef.current.position.x = Math.sin(t * 13) * 2.2;
+        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 26) * 0.06));
+        bodyGroupRef.current.position.y = 2 - stepPhase * 3;
+        bodyGroupRef.current.position.x = Math.sin(t * 13) * 1.6;
       } else {
-        bodyGroupRef.current.scale.set(SPRITE_SCALE * depth, SPRITE_SCALE * depth * (1 + Math.sin(t * 2.4) * 0.02));
-        bodyGroupRef.current.position.y = 3;
+        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
+        bodyGroupRef.current.position.y = 2;
         bodyGroupRef.current.position.x = 0;
       }
     }
     if (shadowRef.current) {
-      const shadowScale = (1 - stepPhase * 0.18) * depth;
+      const shadowScale = 1 - stepPhase * 0.18;
       shadowRef.current.clear();
-      shadowRef.current.beginFill(0x000000, 0.18);
-      shadowRef.current.drawEllipse(0, 4, 11 * shadowScale, 4 * shadowScale);
+      shadowRef.current.beginFill(0x000000, 0.2);
+      shadowRef.current.drawEllipse(0, 2, 10 * shadowScale, 4 * shadowScale);
       shadowRef.current.endFill();
     }
 
@@ -165,13 +171,13 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
-    g.beginFill(0x000000, 0.18);
-    g.drawEllipse(0, 4, 11, 4);
+    g.beginFill(0x000000, 0.2);
+    g.drawEllipse(0, 2, 10, 4);
     g.endFill();
   };
 
   return (
-    <Container ref={outerRef}>
+    <Container ref={outerRef} zIndex={isoDepth(initialPos.x, initialPos.y) + 0.02}>
       <Graphics ref={shadowRef} draw={drawShadow} />
       <Container ref={bodyGroupRef}>
         {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
@@ -179,9 +185,8 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         <Sprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
         <Sprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
       </Container>
-      {icon && <Text text={icon} x={-7} y={-50} style={ICON_STYLE} />}
-      <Text text={employee.displayName} x={0} y={16} anchor={0.5} style={NAME_STYLE} />
-      {employee.currentTask && <Text text={employee.currentTask} x={0} y={30} anchor={0.5} style={TASK_STYLE} />}
+      {icon && <Text text={icon} x={-6} y={-46} style={ICON_STYLE} />}
+      <Text text={employee.displayName} x={0} y={7} anchor={{ x: 0.5, y: 0 }} style={NAME_STYLE} />
     </Container>
   );
 }

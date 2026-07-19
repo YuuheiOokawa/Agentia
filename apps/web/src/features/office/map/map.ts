@@ -1,45 +1,46 @@
 import type { AreaId } from "@agentia/shared-types";
+import { GRID_COLS, GRID_ROWS } from "./iso";
 
+/**
+ * docs/10_OFFICE_SYSTEM.md #2 + docs/07 "カイロソフト風": the floor plan now lives in isometric
+ * WORLD space (tile units, see iso.ts), not screen pixels. Every position this module hands out -
+ * slots, wander bounds, corridor paths - is in tiles; rendering converts via isoToScreen().
+ */
 export interface AreaLayout {
   areaId: AreaId;
   name: string;
   icon: string;
   color: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** Which horizontal corridor band this area opens onto (docs/10_OFFICE_SYSTEM.md #4.1). */
+  /** Room rect in tile units. */
+  gx: number;
+  gy: number;
+  gw: number;
+  gh: number;
+  /** Which horizontal band this area sits in (bands are separated by walk corridors). */
   row: number;
-  /** Desk-slot grid so several employees in the same area spread out instead of stacking (docs/10 #3 deskSlots). */
+  /** Desk-slot grid so several employees in the same area spread out instead of stacking (docs/10 #3). */
   slotGrid: { cols: number; rows: number };
 }
 
-/** docs/10_OFFICE_SYSTEM.md #2: Phase 2 renders the full 12-area floor plan on one fixed-size stage. */
-export const OFFICE_WIDTH = 960;
-export const OFFICE_HEIGHT = 800;
-
-const ROW_Y = [20, 200, 450, 630] as const;
-const ROW_HEIGHT = [150, 220, 150, 140] as const;
-export { ROW_Y, ROW_HEIGHT };
-
+/** 27x19-tile floor: four room bands with 1-tile corridors between them (y=4/10/15) and a shared
+ * vertical corridor column at x=20 that is open in every band - characters travel through these. */
 export const PHASE2_AREA_LAYOUT: readonly AreaLayout[] = [
-  // Row 0
-  { areaId: "library", name: "本棚・資料エリア", icon: "📚", color: 0x8d6e63, x: 20, y: ROW_Y[0], width: 220, height: ROW_HEIGHT[0], row: 0, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "research_space", name: "調査・リサーチスペース", icon: "🔍", color: 0x5c6bc0, x: 260, y: ROW_Y[0], width: 220, height: ROW_HEIGHT[0], row: 0, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "meeting_room", name: "会議室", icon: "🗂", color: 0x8e24aa, x: 500, y: ROW_Y[0], width: 220, height: ROW_HEIGHT[0], row: 0, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "pm_space", name: "プロジェクト管理スペース", icon: "📋", color: 0x3949ab, x: 740, y: ROW_Y[0], width: 200, height: ROW_HEIGHT[0], row: 0, slotGrid: { cols: 2, rows: 2 } },
-  // Row 1
-  { areaId: "dev_floor", name: "開発デスク", icon: "💻", color: 0x1e88e5, x: 20, y: ROW_Y[1], width: 460, height: ROW_HEIGHT[1], row: 1, slotGrid: { cols: 4, rows: 2 } },
-  { areaId: "personal_desk", name: "個人デスク", icon: "🪑", color: 0x90a4ae, x: 500, y: ROW_Y[1], width: 220, height: ROW_HEIGHT[1], row: 1, slotGrid: { cols: 3, rows: 3 } },
-  { areaId: "server_room", name: "サーバールーム", icon: "🗄", color: 0x37474f, x: 740, y: ROW_Y[1], width: 200, height: ROW_HEIGHT[1], row: 1, slotGrid: { cols: 2, rows: 2 } },
-  // Row 2
-  { areaId: "terminal_room", name: "ターミナルルーム", icon: "🖥", color: 0x455a64, x: 20, y: ROW_Y[2], width: 220, height: ROW_HEIGHT[2], row: 2, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "qa_room", name: "QA・テストルーム", icon: "🧪", color: 0x43a047, x: 260, y: ROW_Y[2], width: 220, height: ROW_HEIGHT[2], row: 2, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "deploy_area", name: "デプロイエリア", icon: "🚀", color: 0xef6c00, x: 500, y: ROW_Y[2], width: 220, height: ROW_HEIGHT[2], row: 2, slotGrid: { cols: 3, rows: 2 } },
-  { areaId: "github_hub", name: "GitHub連携スペース", icon: "🐙", color: 0x2b3137, x: 740, y: ROW_Y[2], width: 200, height: ROW_HEIGHT[2], row: 2, slotGrid: { cols: 2, rows: 2 } },
-  // Row 3
-  { areaId: "break_room", name: "休憩スペース", icon: "☕", color: 0xf9a825, x: 20, y: ROW_Y[3], width: 920, height: ROW_HEIGHT[3], row: 3, slotGrid: { cols: 7, rows: 1 } },
+  // Band 0 (back wall of the building)
+  { areaId: "library", name: "本棚・資料エリア", icon: "📚", color: 0x8d6e63, gx: 0, gy: 0, gw: 6, gh: 4, row: 0, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "research_space", name: "調査・リサーチスペース", icon: "🔍", color: 0x5c6bc0, gx: 7, gy: 0, gw: 6, gh: 4, row: 0, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "meeting_room", name: "会議室", icon: "🗂", color: 0x8e24aa, gx: 14, gy: 0, gw: 6, gh: 4, row: 0, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "pm_space", name: "プロジェクト管理スペース", icon: "📋", color: 0x3949ab, gx: 21, gy: 0, gw: 6, gh: 4, row: 0, slotGrid: { cols: 2, rows: 2 } },
+  // Band 1
+  { areaId: "dev_floor", name: "開発デスク", icon: "💻", color: 0x1e88e5, gx: 0, gy: 5, gw: 12, gh: 5, row: 1, slotGrid: { cols: 4, rows: 2 } },
+  { areaId: "personal_desk", name: "個人デスク", icon: "🪑", color: 0x90a4ae, gx: 13, gy: 5, gw: 7, gh: 5, row: 1, slotGrid: { cols: 3, rows: 3 } },
+  { areaId: "server_room", name: "サーバールーム", icon: "🗄", color: 0x37474f, gx: 21, gy: 5, gw: 6, gh: 5, row: 1, slotGrid: { cols: 2, rows: 2 } },
+  // Band 2
+  { areaId: "terminal_room", name: "ターミナルルーム", icon: "🖥", color: 0x455a64, gx: 0, gy: 11, gw: 6, gh: 4, row: 2, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "qa_room", name: "QA・テストルーム", icon: "🧪", color: 0x43a047, gx: 7, gy: 11, gw: 6, gh: 4, row: 2, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "deploy_area", name: "デプロイエリア", icon: "🚀", color: 0xef6c00, gx: 14, gy: 11, gw: 6, gh: 4, row: 2, slotGrid: { cols: 3, rows: 2 } },
+  { areaId: "github_hub", name: "GitHub連携スペース", icon: "🐙", color: 0x2b3137, gx: 21, gy: 11, gw: 6, gh: 4, row: 2, slotGrid: { cols: 2, rows: 2 } },
+  // Band 3 (front of the building)
+  { areaId: "break_room", name: "休憩スペース", icon: "☕", color: 0xf9a825, gx: 0, gy: 16, gw: GRID_COLS, gh: 3, row: 3, slotGrid: { cols: 7, rows: 1 } },
 ];
 
 export const AREA_LAYOUT_BY_ID: ReadonlyMap<AreaId, AreaLayout> = new Map(
@@ -60,8 +61,7 @@ export type FurnitureProp =
   | "vending_machine";
 
 /** Which pixel-art prop decorates each area's desk slots (docs/10 #2 area definitions). A list cycles
- * across slots by index instead of repeating one prop, for rooms that should read as more varied
- * (docs/07 "会社みたいに"). */
+ * across slots by index instead of repeating one prop, for rooms that should read as more varied. */
 export const AREA_FURNITURE: Record<AreaId, FurnitureProp | FurnitureProp[]> = {
   library: "bookshelf",
   research_space: "desk",
@@ -77,10 +77,7 @@ export const AREA_FURNITURE: Record<AreaId, FurnitureProp | FurnitureProp[]> = {
   break_room: ["plant", "couch", "vending_machine"],
 };
 
-/**
- * A single extra decorative prop per area, rendered once in a room corner (not per desk-slot),
- * so rooms read as a real furnished office instead of identical desk rows (docs/07 "会社みたいに").
- */
+/** A single extra decorative prop per area, parked against the room's back wall. */
 export const AREA_ACCESSORY: Partial<Record<AreaId, FurnitureProp>> = {
   meeting_room: "whiteboard",
   pm_space: "whiteboard",
@@ -88,8 +85,10 @@ export const AREA_ACCESSORY: Partial<Record<AreaId, FurnitureProp>> = {
   library: "cabinet",
 };
 
-const CORRIDOR_X = OFFICE_WIDTH / 2;
-const ROW_CORRIDOR_Y = ROW_Y.map((y, i) => y + ROW_HEIGHT[i]! / 2);
+/** The one vertical corridor column open in every band (x=20 is a wall gap in bands 0-2). */
+const CORRIDOR_X = 20.5;
+/** World-y center of the walk corridor below each band boundary (between bands 0/1, 1/2, 2/3). */
+const GAP_Y = [4.5, 10.5, 15.5] as const;
 
 function hashCode(value: string): number {
   let hash = 0;
@@ -100,104 +99,36 @@ function hashCode(value: string): number {
   return Math.abs(hash);
 }
 
-export interface DividerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * The gaps between rooms currently just show the stage background - this computes those gaps so
- * OfficeCanvas can fill them with a visible divider (docs/07 "部屋同士の境界をはっきりさせる"):
- * a vertical partition-wall strip between same-row neighbors, a horizontal raised-floor-edge strip
- * between rows (which doubles as the corridor characters walk along in pathToArea).
- */
-export function roomDividers(): { partitions: DividerRect[]; floorEdges: DividerRect[] } {
-  const byRow = new Map<number, AreaLayout[]>();
-  for (const area of PHASE2_AREA_LAYOUT) {
-    const list = byRow.get(area.row) ?? [];
-    list.push(area);
-    byRow.set(area.row, list);
-  }
-
-  const partitions: DividerRect[] = [];
-  for (const areas of byRow.values()) {
-    const sorted = [...areas].sort((a, b) => a.x - b.x);
-    for (let i = 0; i < sorted.length - 1; i += 1) {
-      const left = sorted[i]!;
-      const right = sorted[i + 1]!;
-      const gapX = left.x + left.width;
-      const gapWidth = right.x - gapX;
-      if (gapWidth <= 0) continue;
-      const y = Math.min(left.y, right.y);
-      const height = Math.max(left.y + left.height, right.y + right.height) - y;
-      partitions.push({ x: gapX, y, width: gapWidth, height });
-    }
-  }
-
-  const floorEdges: DividerRect[] = [];
-  for (let i = 0; i < ROW_Y.length - 1; i += 1) {
-    const rowBottom = ROW_Y[i]! + ROW_HEIGHT[i]!;
-    const nextTop = ROW_Y[i + 1]!;
-    const gapHeight = nextTop - rowBottom;
-    if (gapHeight <= 0) continue;
-    floorEdges.push({ x: 20, y: rowBottom, width: OFFICE_WIDTH - 40, height: gapHeight });
-  }
-
-  return { partitions, floorEdges };
-}
-
-/** How far toward the front (near the viewer) vs. the back (near the wall) a given y sits within its
- * room, as a 0..1 fraction. Used to fake depth/perspective (docs/07 "3Dな感じ") in an otherwise flat
- * top-down floor plan: things nearer the back wall render smaller, things nearer the viewer larger. */
-export function areaDepthFraction(areaId: AreaId, y: number): number {
-  const area = AREA_LAYOUT_BY_ID.get(areaId);
-  if (!area) return 0.5;
-  const topPad = 40;
-  const usableHeight = area.height - topPad;
-  if (usableHeight <= 0) return 0.5;
-  return Math.min(1, Math.max(0, (y - (area.y + topPad)) / usableHeight));
-}
-
-/** Perspective scale multiplier for the given depth fraction (0 = back wall, 1 = front/viewer). */
-export function depthScale(fraction: number): number {
-  return 0.84 + 0.3 * fraction;
-}
-
-/** Center point of an area (used as a fallback and for the corridor/label math). */
+/** Center point of an area in world tiles. */
 export function areaCenter(areaId: AreaId): { x: number; y: number } {
   const area = AREA_LAYOUT_BY_ID.get(areaId);
-  if (!area) return { x: OFFICE_WIDTH / 2, y: OFFICE_HEIGHT / 2 };
-  return { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+  if (!area) return { x: GRID_COLS / 2, y: GRID_ROWS / 2 };
+  return { x: area.gx + area.gw / 2, y: area.gy + area.gh / 2 };
 }
 
-/** The padded interior rect a character may roam within without walking into the wall/label band
- * (same padding as areaSlots) - lets idle/waiting/completed characters wander the whole room instead
- * of a tiny fixed radius near their desk (docs/10 #6 liveliness). */
+/** The interior rect (world tiles) a character may roam without standing inside a wall. */
 export function areaWanderBounds(areaId: AreaId): { x: number; y: number; width: number; height: number } {
   const area = AREA_LAYOUT_BY_ID.get(areaId);
-  if (!area) return { x: 0, y: 0, width: OFFICE_WIDTH, height: OFFICE_HEIGHT };
-  const topPad = 40;
-  const sidePad = 24;
-  return { x: area.x + sidePad, y: area.y + topPad, width: area.width - sidePad * 2, height: area.height - topPad - sidePad };
+  if (!area) return { x: 0, y: 0, width: GRID_COLS, height: GRID_ROWS };
+  return { x: area.gx + 0.9, y: area.gy + 1.0, width: area.gw - 1.8, height: area.gh - 1.6 };
 }
 
-/** All desk-slot positions inside an area, arranged in its slotGrid (docs/10 #3). */
+/** All desk-slot positions inside an area (world tiles), arranged in its slotGrid (docs/10 #3). */
 export function areaSlots(areaId: AreaId): Array<{ x: number; y: number }> {
   const area = AREA_LAYOUT_BY_ID.get(areaId);
   if (!area) return [areaCenter(areaId)];
   const { cols, rows } = area.slotGrid;
-  const topPad = 40; // leave room for the area name label
-  const sidePad = 24;
-  const cellW = (area.width - sidePad * 2) / cols;
-  const cellH = (area.height - topPad - sidePad) / rows;
+  const sidePad = 0.9;
+  const topPad = 1.1;
+  const bottomPad = 0.5;
+  const cellW = (area.gw - sidePad * 2) / cols;
+  const cellH = (area.gh - topPad - bottomPad) / rows;
   const slots: Array<{ x: number; y: number }> = [];
   for (let r = 0; r < rows; r += 1) {
     for (let c = 0; c < cols; c += 1) {
       slots.push({
-        x: area.x + sidePad + cellW * (c + 0.5),
-        y: area.y + topPad + cellH * (r + 0.5),
+        x: area.gx + sidePad + cellW * (c + 0.5),
+        y: area.gy + topPad + cellH * (r + 0.5),
       });
     }
   }
@@ -212,10 +143,18 @@ export function areaSlotFor(areaId: AreaId, agentId: string): { x: number; y: nu
   return slot ?? areaCenter(areaId);
 }
 
+/** The corridor row a character exits into when leaving `row` heading toward `towardRow`. */
+function corridorFor(row: number, towardRow: number): number {
+  if (towardRow > row) return GAP_Y[Math.min(row, GAP_Y.length - 1)]!;
+  if (towardRow < row) return GAP_Y[Math.max(row - 1, 0)]!;
+  return GAP_Y[Math.min(row, GAP_Y.length - 1)]!;
+}
+
 /**
- * docs/10_OFFICE_SYSTEM.md #4.1: characters walk to a central corridor, travel along it past any
- * intervening rows, then walk into the destination's desk slot - instead of teleporting or cutting
- * straight through walls via one shared midpoint.
+ * docs/10_OFFICE_SYSTEM.md #4.1, now corridor-accurate for the iso view: characters step out of
+ * their room into the nearest walk corridor, travel along it (and the shared vertical corridor at
+ * x=20.5 when changing bands), then step into the destination room - so with visible walls they
+ * read as walking the hallways instead of cutting through rooms.
  */
 export function pathToArea(fromAreaId: AreaId, toAreaId: AreaId, agentId: string): Array<{ x: number; y: number }> {
   const destination = areaSlotFor(toAreaId, agentId);
@@ -225,13 +164,17 @@ export function pathToArea(fromAreaId: AreaId, toAreaId: AreaId, agentId: string
   const toArea = AREA_LAYOUT_BY_ID.get(toAreaId);
   const fromRow = fromArea?.row ?? 0;
   const toRow = toArea?.row ?? 0;
+  const fromCenter = areaCenter(fromAreaId);
 
-  const path: Array<{ x: number; y: number }> = [{ x: CORRIDOR_X, y: ROW_CORRIDOR_Y[fromRow] ?? CORRIDOR_X }];
-  const step = fromRow < toRow ? 1 : -1;
-  for (let row = fromRow + step; row !== toRow; row += step) {
-    path.push({ x: CORRIDOR_X, y: ROW_CORRIDOR_Y[row] ?? CORRIDOR_X });
+  const exitY = corridorFor(fromRow, toRow);
+  const enterY = corridorFor(toRow, fromRow);
+
+  const path: Array<{ x: number; y: number }> = [{ x: fromCenter.x, y: exitY }];
+  if (fromRow !== toRow) {
+    path.push({ x: CORRIDOR_X, y: exitY });
+    path.push({ x: CORRIDOR_X, y: enterY });
   }
-  if (fromRow !== toRow) path.push({ x: CORRIDOR_X, y: ROW_CORRIDOR_Y[toRow] ?? CORRIDOR_X });
+  path.push({ x: destination.x, y: enterY });
   path.push(destination);
   return path;
 }
