@@ -148,6 +148,23 @@ export function roomDividers(): { partitions: DividerRect[]; floorEdges: Divider
   return { partitions, floorEdges };
 }
 
+/** How far toward the front (near the viewer) vs. the back (near the wall) a given y sits within its
+ * room, as a 0..1 fraction. Used to fake depth/perspective (docs/07 "3Dな感じ") in an otherwise flat
+ * top-down floor plan: things nearer the back wall render smaller, things nearer the viewer larger. */
+export function areaDepthFraction(areaId: AreaId, y: number): number {
+  const area = AREA_LAYOUT_BY_ID.get(areaId);
+  if (!area) return 0.5;
+  const topPad = 40;
+  const usableHeight = area.height - topPad;
+  if (usableHeight <= 0) return 0.5;
+  return Math.min(1, Math.max(0, (y - (area.y + topPad)) / usableHeight));
+}
+
+/** Perspective scale multiplier for the given depth fraction (0 = back wall, 1 = front/viewer). */
+export function depthScale(fraction: number): number {
+  return 0.84 + 0.3 * fraction;
+}
+
 /** Center point of an area (used as a fallback and for the corridor/label math). */
 export function areaCenter(areaId: AreaId): { x: number; y: number } {
   const area = AREA_LAYOUT_BY_ID.get(areaId);

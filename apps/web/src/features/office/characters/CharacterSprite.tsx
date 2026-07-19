@@ -5,7 +5,7 @@ import { Container, Graphics, Sprite, Text } from "@pixi/react";
 import { useTick } from "@pixi/react";
 import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics, type Sprite as PixiSprite } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
-import { areaSlotFor, areaWanderBounds, pathToArea } from "../map/map";
+import { areaDepthFraction, areaSlotFor, areaWanderBounds, depthScale, pathToArea } from "../map/map";
 import { CHARACTER_TEXTURES, poseForState, type Facing } from "../pixel-assets";
 
 const WALK_SPEED_PX_PER_MS = 0.11;
@@ -129,20 +129,24 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
      * (a proper "footstep" feel instead of independent wobbles), and settle back to neutral (0)
      * the instant the character stops. */
     const stepPhase = moving ? Math.abs(Math.sin(t * 13)) : 0;
+    /** Characters nearer the room's back wall render a little smaller, nearer the viewer a little
+     * bigger - the same depth illusion applied to furniture (docs/07 "3Dな感じ"), kept in sync with
+     * position every tick since (unlike furniture) a character's y constantly changes. */
+    const depth = depthScale(areaDepthFraction(employee.areaId, posRef.current.y));
 
     if (bodyGroupRef.current) {
       if (moving) {
-        bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 26) * 0.06));
+        bodyGroupRef.current.scale.set(SPRITE_SCALE * depth, SPRITE_SCALE * depth * (1 + Math.sin(t * 26) * 0.06));
         bodyGroupRef.current.position.y = 3 - stepPhase * 3;
         bodyGroupRef.current.position.x = Math.sin(t * 13) * 2.2;
       } else {
-        bodyGroupRef.current.scale.set(SPRITE_SCALE, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
+        bodyGroupRef.current.scale.set(SPRITE_SCALE * depth, SPRITE_SCALE * depth * (1 + Math.sin(t * 2.4) * 0.02));
         bodyGroupRef.current.position.y = 3;
         bodyGroupRef.current.position.x = 0;
       }
     }
     if (shadowRef.current) {
-      const shadowScale = 1 - stepPhase * 0.18;
+      const shadowScale = (1 - stepPhase * 0.18) * depth;
       shadowRef.current.clear();
       shadowRef.current.beginFill(0x000000, 0.18);
       shadowRef.current.drawEllipse(0, 4, 11 * shadowScale, 4 * shadowScale);
