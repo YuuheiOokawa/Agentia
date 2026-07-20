@@ -1,13 +1,13 @@
-import { BaseTexture, SCALE_MODES, Texture } from "pixi.js";
+import { Assets, Texture, TextureSource } from "pixi.js";
 import type { CharacterState } from "@agentia/shared-types";
 import type { FurnitureProp } from "./map/map";
 
 // Pixel art must never be smoothed - keep every sprite crisp when scaled (docs request: real pixel-art assets).
-BaseTexture.defaultOptions.scaleMode = SCALE_MODES.NEAREST;
+TextureSource.defaultOptions.scaleMode = "nearest";
 
 const SPRITE_BASE = "/sprites";
 
-export type CharacterPose = "idle" | "working" | "error" | "completed";
+export type CharacterPose = "idle" | "working" | "error" | "completed" | "walk1" | "walk2";
 /** Which way the character is drawn facing - "front" (toward the viewer) or "back" (walking away/up),
  * a pure rendering flourish driven by movement direction (like the wander stroll), not store state. */
 export type Facing = "front" | "back";
@@ -16,31 +16,61 @@ export type Facing = "front" | "back";
  * tools/pixel-art/characters.mjs and picked deterministically from the employee's avatarVariant. */
 export const CHARACTER_VARIANT_COUNT = 5;
 
-const POSES: readonly CharacterPose[] = ["idle", "working", "error", "completed"];
+const POSES: readonly CharacterPose[] = ["idle", "working", "error", "completed", "walk1", "walk2"];
 const FACINGS: readonly Facing[] = ["front", "back"];
 
-function pairTexture(variant: number, pose: CharacterPose, facing: Facing) {
-  return {
-    body: Texture.from(`${SPRITE_BASE}/char_v${variant}_${pose}_${facing}_body.png`),
-    details: Texture.from(`${SPRITE_BASE}/char_v${variant}_${pose}_${facing}_details.png`),
-  };
+const FURNITURE_PROPS: readonly FurnitureProp[] = [
+  "desk",
+  "bookshelf",
+  "plant",
+  "server",
+  "reception",
+  "whiteboard",
+  "cabinet",
+  "conference_table",
+  "monitor_wall",
+  "couch",
+  "vending_machine",
+  "water_server",
+  "trash",
+];
+
+function characterUrl(variant: number, pose: CharacterPose, facing: Facing, layer: "body" | "details"): string {
+  return `${SPRITE_BASE}/char_v${variant}_${pose}_${facing}_${layer}.png`;
 }
 
-export const CHARACTER_TEXTURES: ReadonlyArray<Record<CharacterPose, Record<Facing, { body: Texture; details: Texture }>>> =
-  Array.from({ length: CHARACTER_VARIANT_COUNT }, (_, variant) => {
-    const byPose = {} as Record<CharacterPose, Record<Facing, { body: Texture; details: Texture }>>;
-    for (const pose of POSES) {
-      byPose[pose] = {
-        front: pairTexture(variant, pose, "front"),
-        back: pairTexture(variant, pose, "back"),
-      };
-    }
-    return byPose;
-  });
+function propUrl(prop: FurnitureProp): string {
+  return `${SPRITE_BASE}/prop_${prop}.png`;
+}
 
-/** The texture pair for one employee's look; avatarVariant (0-7) folds onto the 5 generated variants. */
-export function characterTextures(avatarVariant: number, pose: CharacterPose, facing: Facing) {
-  return CHARACTER_TEXTURES[Math.abs(avatarVariant) % CHARACTER_VARIANT_COUNT]![pose][facing];
+const WINDOW_URL = `${SPRITE_BASE}/prop_window.png`;
+
+function allAssetUrls(): string[] {
+  const urls: string[] = [WINDOW_URL];
+  for (const prop of FURNITURE_PROPS) urls.push(propUrl(prop));
+  for (let variant = 0; variant < CHARACTER_VARIANT_COUNT; variant += 1) {
+    for (const pose of POSES) {
+      for (const facing of FACINGS) {
+        urls.push(characterUrl(variant, pose, facing, "body"));
+        urls.push(characterUrl(variant, pose, facing, "details"));
+      }
+    }
+  }
+  return urls;
+}
+
+let loadPromise: Promise<void> | null = null;
+
+/**
+ * PixiJS v8 no longer lazy-loads textures from URLs inside Texture.from - everything is fetched
+ * up front through the Assets loader (with caching + dedupe). OfficeCanvas awaits this once
+ * before mounting the stage, so every later texture lookup below is a synchronous cache hit.
+ */
+export function loadOfficeAssets(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = Assets.load(allAssetUrls()).then(() => undefined);
+  }
+  return loadPromise;
 }
 
 /** docs/09_CHARACTER_SYSTEM.md #3 states collapse onto a small set of sprite poses. */
@@ -63,26 +93,20 @@ export function poseForState(state: CharacterState): CharacterPose {
   return STATE_TO_POSE[state];
 }
 
-export const FLOOR_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_floor.png`);
-export const WALL_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_wall.png`);
-export const FLOOR_EDGE_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_floor_edge.png`);
-export const PARTITION_TEXTURE = Texture.from(`${SPRITE_BASE}/tile_partition.png`);
+/** The texture pair for one employee's look; avatarVariant (0-7) folds onto the 5 generated variants. */
+export function characterTextures(avatarVariant: number, pose: CharacterPose, facing: Facing): { body: Texture; details: Texture } {
+  const variant = Math.abs(avatarVariant) % CHARACTER_VARIANT_COUNT;
+  return {
+    body: Assets.get<Texture>(characterUrl(variant, pose, facing, "body")),
+    details: Assets.get<Texture>(characterUrl(variant, pose, facing, "details")),
+  };
+}
 
-export const FURNITURE_TEXTURES: Record<FurnitureProp, Texture> = {
-  desk: Texture.from(`${SPRITE_BASE}/prop_desk.png`),
-  bookshelf: Texture.from(`${SPRITE_BASE}/prop_bookshelf.png`),
-  plant: Texture.from(`${SPRITE_BASE}/prop_plant.png`),
-  server: Texture.from(`${SPRITE_BASE}/prop_server.png`),
-  reception: Texture.from(`${SPRITE_BASE}/prop_reception.png`),
-  whiteboard: Texture.from(`${SPRITE_BASE}/prop_whiteboard.png`),
-  cabinet: Texture.from(`${SPRITE_BASE}/prop_cabinet.png`),
-  conference_table: Texture.from(`${SPRITE_BASE}/prop_conference_table.png`),
-  monitor_wall: Texture.from(`${SPRITE_BASE}/prop_monitor_wall.png`),
-  couch: Texture.from(`${SPRITE_BASE}/prop_couch.png`),
-  vending_machine: Texture.from(`${SPRITE_BASE}/prop_vending_machine.png`),
-  water_server: Texture.from(`${SPRITE_BASE}/prop_water_server.png`),
-  trash: Texture.from(`${SPRITE_BASE}/prop_trash.png`),
-};
+export function furnitureTexture(prop: FurnitureProp): Texture {
+  return Assets.get<Texture>(propUrl(prop));
+}
 
 /** Wall-mounted window prop for exterior-facing (topmost row) walls, untinted like furniture. */
-export const WINDOW_TEXTURE = Texture.from(`${SPRITE_BASE}/prop_window.png`);
+export function windowTexture(): Texture {
+  return Assets.get<Texture>(WINDOW_URL);
+}

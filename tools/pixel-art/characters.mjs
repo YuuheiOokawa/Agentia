@@ -51,13 +51,33 @@ const VARIANTS = [
   { id: 4, hair: "spiky", glasses: false, hoodie: true, hairColor: { h: [196, 158, 80, 255], H: [224, 192, 110, 255], d: [150, 116, 56, 255] } },
 ];
 
-/** ポーズごとの腕・手の位置。 */
+/** ポーズごとの腕・手の位置。walk1/walk2 は歩行サイクルの2コマ(腕を前後にスイング)。 */
 const POSES = {
   idle: { leftArm: [4, 17, 3, 7], rightArm: [17, 17, 3, 7], leftHand: [4, 23], rightHand: [18, 23] },
   working: { leftArm: [7, 19, 3, 6], rightArm: [14, 19, 3, 6], leftHand: [8, 24], rightHand: [14, 24] },
   error: { leftArm: [2, 12, 4, 8], rightArm: [18, 12, 4, 8], leftHand: [2, 10], rightHand: [20, 10] },
   completed: { leftArm: [3, 9, 4, 8], rightArm: [17, 9, 4, 8], leftHand: [3, 7], rightHand: [19, 7] },
+  walk1: { leftArm: [4, 15, 3, 7], rightArm: [17, 19, 3, 6], leftHand: [4, 21], rightHand: [18, 24], legPhase: 1 },
+  walk2: { leftArm: [4, 19, 3, 6], rightArm: [17, 15, 3, 7], leftHand: [4, 24], rightHand: [18, 21], legPhase: 2 },
 };
+
+/**
+ * 脚の描画。legPhase 0 = 直立(両脚接地)、1 = 左脚を上げる、2 = 右脚を上げる。
+ * カイロソフト風の2コマ歩行: 上げた脚は1px短く+靴を1px上げ、接地脚はそのまま。
+ */
+function drawLegs(grid, legPhase = 0) {
+  const leftUp = legPhase === 1;
+  const rightUp = legPhase === 2;
+
+  // 左脚
+  fillRect(grid, 7, 23, 4, leftUp ? 4 : 5, "p");
+  fillRect(grid, 7, 26, 4, leftUp ? 1 : 2, "P");
+  fillRect(grid, 6, leftUp ? 27 : 28, 5, 2, "k");
+  // 右脚
+  fillRect(grid, 13, 23, 4, rightUp ? 4 : 5, "p");
+  fillRect(grid, 13, 26, 4, rightUp ? 1 : 2, "P");
+  fillRect(grid, 13, rightUp ? 27 : 28, 5, 2, "k");
+}
 
 function setPixelSafe(grid, x, y, ch) {
   if (y >= 0 && y < grid.length && x >= 0 && x < grid[0].length) grid[y][x] = ch;
@@ -156,16 +176,11 @@ function applyHoodieBack(grid) {
 /**
  * キャラクター共通部分(正面)。チビキャラ: 頭約10px / 胴体約10px / 脚約7px ≒ 2.5頭身。
  */
-function buildBaseGrid(variant) {
+function buildBaseGrid(variant, legPhase = 0) {
   const grid = createGrid(WIDTH, HEIGHT);
 
   // 脚
-  fillRect(grid, 7, 23, 4, 5, "p");
-  fillRect(grid, 13, 23, 4, 5, "p");
-  fillRect(grid, 7, 26, 4, 2, "P");
-  fillRect(grid, 13, 26, 4, 2, "P");
-  fillRect(grid, 6, 28, 5, 2, "k");
-  fillRect(grid, 13, 28, 5, 2, "k");
+  drawLegs(grid, legPhase);
 
   // 胴体
   fillRect(grid, 5, 15, 14, 9, "o");
@@ -203,16 +218,11 @@ function buildBaseGrid(variant) {
 }
 
 /** キャラクター共通部分(後ろ向き)。 */
-function buildBackGrid(variant) {
+function buildBackGrid(variant, legPhase = 0) {
   const grid = createGrid(WIDTH, HEIGHT);
 
   // 脚(正面と同じ)
-  fillRect(grid, 7, 23, 4, 5, "p");
-  fillRect(grid, 13, 23, 4, 5, "p");
-  fillRect(grid, 7, 26, 4, 2, "P");
-  fillRect(grid, 13, 26, 4, 2, "P");
-  fillRect(grid, 6, 28, 5, 2, "k");
-  fillRect(grid, 13, 28, 5, 2, "k");
+  drawLegs(grid, legPhase);
 
   // 胴体(背中側)
   fillRect(grid, 5, 15, 14, 9, "o");
@@ -275,7 +285,8 @@ function buildDetailsLayer(grid) {
 const FACINGS = ["front", "back"];
 
 function generatePose(variant, pose, facing) {
-  const baseGrid = facing === "back" ? buildBackGrid(variant) : buildBaseGrid(variant);
+  const legPhase = POSES[pose]?.legPhase ?? 0;
+  const baseGrid = facing === "back" ? buildBackGrid(variant, legPhase) : buildBaseGrid(variant, legPhase);
   const combined = addPose(baseGrid, pose);
   const bodyGrid = buildBodyLayer(combined);
   const detailsGrid = buildDetailsLayer(combined);

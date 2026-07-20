@@ -1,8 +1,16 @@
 "use client";
 
-import { Fragment } from "react";
-import { Stage, Container, Graphics, Sprite, Text } from "@pixi/react";
-import { TextMetrics, TextStyle, type Graphics as PixiGraphics } from "pixi.js";
+import { Fragment, useEffect, useState } from "react";
+import { Application, extend } from "@pixi/react";
+import {
+  Container,
+  Graphics,
+  Sprite,
+  Text,
+  CanvasTextMetrics,
+  TextStyle,
+  type Graphics as PixiGraphics,
+} from "pixi.js";
 import { useOfficeStore } from "@/stores/office-store";
 import { lightenColor, shadeColor } from "@/lib/color";
 import {
@@ -25,10 +33,19 @@ import {
   WALL_H,
 } from "../map/iso";
 import { CharacterSprite } from "../characters/CharacterSprite";
-import { FURNITURE_TEXTURES, WINDOW_TEXTURE } from "../pixel-assets";
+import { furnitureTexture, loadOfficeAssets, windowTexture } from "../pixel-assets";
+
+// PixiJS v8: React components are created from pixi classes via extend() - this registers the
+// <pixiContainer>/<pixiGraphics>/<pixiSprite>/<pixiText> intrinsic elements used below.
+extend({ Container, Graphics, Sprite, Text });
 
 const AREA_LABEL_STYLE = new TextStyle({ fontSize: 12, fontWeight: "700", fill: 0xffffff });
-const STEP_LABEL_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff, stroke: 0x1a2b45, strokeThickness: 3 });
+const STEP_LABEL_STYLE = new TextStyle({
+  fontSize: 11,
+  fontWeight: "700",
+  fill: 0xffffff,
+  stroke: { color: 0x1a2b45, width: 3 },
+});
 const STEP_NUMBER_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill: 0xffffff });
 
 /** The new isometric voxel props are drawn on smaller grids than the old flat billboards. */
@@ -41,7 +58,7 @@ function tileDiamond(g: PixiGraphics, tx: number, ty: number): void {
   const right = isoToScreen(tx + 1, ty);
   const bottom = isoToScreen(tx + 1, ty + 1);
   const left = isoToScreen(tx, ty + 1);
-  g.drawPolygon([top.x, top.y, right.x, right.y, bottom.x, bottom.y, left.x, left.y]);
+  g.poly([top.x, top.y, right.x, right.y, bottom.x, bottom.y, left.x, left.y]);
 }
 
 /** Neutral checkerboard under the whole grid, ringed by a grey sidewalk apron, with the building's
@@ -53,10 +70,15 @@ function BaseFloor() {
     for (let ty = -1; ty < GRID_ROWS + APRON_TILES; ty += 1) {
       for (let tx = -APRON_TILES; tx < GRID_COLS + APRON_TILES; tx += 1) {
         const inside = tx >= 0 && tx < GRID_COLS && ty >= 0 && ty < GRID_ROWS;
-        if (inside) g.beginFill((tx + ty) % 2 === 0 ? 0xd9d6cf : 0xcfccc4);
-        else g.beginFill((tx + ty) % 2 === 0 ? 0xe0e0de : 0xd8d8d6);
+        const color = inside
+          ? (tx + ty) % 2 === 0
+            ? 0xd9d6cf
+            : 0xcfccc4
+          : (tx + ty) % 2 === 0
+            ? 0xe0e0de
+            : 0xd8d8d6;
         tileDiamond(g, tx, ty);
-        g.endFill();
+        g.fill(color);
       }
     }
 
@@ -65,24 +87,21 @@ function BaseFloor() {
     const s2 = isoToScreen(GRID_COLS, GRID_ROWS);
     const s3 = isoToScreen(GRID_COLS, GRID_ROWS + 0.8);
     const s4 = isoToScreen(0, GRID_ROWS + 0.8);
-    g.beginFill(0x000000, 0.1);
-    g.drawPolygon([s1.x, s1.y, s2.x, s2.y, s3.x, s3.y, s4.x, s4.y]);
-    g.endFill();
+    g.poly([s1.x, s1.y, s2.x, s2.y, s3.x, s3.y, s4.x, s4.y]);
+    g.fill({ color: 0x000000, alpha: 0.1 });
     const e1 = isoToScreen(GRID_COLS, 0);
     const e2 = isoToScreen(GRID_COLS, GRID_ROWS);
     const e3 = isoToScreen(GRID_COLS + 0.8, GRID_ROWS);
     const e4 = isoToScreen(GRID_COLS + 0.8, 0);
-    g.beginFill(0x000000, 0.1);
-    g.drawPolygon([e1.x, e1.y, e2.x, e2.y, e3.x, e3.y, e4.x, e4.y]);
-    g.endFill();
+    g.poly([e1.x, e1.y, e2.x, e2.y, e3.x, e3.y, e4.x, e4.y]);
+    g.fill({ color: 0x000000, alpha: 0.1 });
 
     // Entrance doormat centered on the building's front edge.
     const mat = isoToScreen(13.5, GRID_ROWS + 0.55);
-    g.beginFill(0x9b958d);
-    g.drawPolygon([mat.x - 20, mat.y, mat.x, mat.y - 10, mat.x + 20, mat.y, mat.x, mat.y + 10]);
-    g.endFill();
+    g.poly([mat.x - 20, mat.y, mat.x, mat.y - 10, mat.x + 20, mat.y, mat.x, mat.y + 10]);
+    g.fill(0x9b958d);
   };
-  return <Graphics zIndex={-1000} draw={draw} />;
+  return <pixiGraphics zIndex={-1000} draw={draw} />;
 }
 
 /** A room's colored checker floor (two lightened shades of its accent color), with a soft ambient-
@@ -95,9 +114,8 @@ function RoomFloor({ area }: { area: AreaLayout }) {
     g.clear();
     for (let ty = area.gy; ty < area.gy + area.gh; ty += 1) {
       for (let tx = area.gx; tx < area.gx + area.gw; tx += 1) {
-        g.beginFill((tx + ty) % 2 === 0 ? shadeA : shadeB);
         tileDiamond(g, tx, ty);
-        g.endFill();
+        g.fill((tx + ty) % 2 === 0 ? shadeA : shadeB);
       }
     }
 
@@ -105,16 +123,14 @@ function RoomFloor({ area }: { area: AreaLayout }) {
     const n2 = isoToScreen(area.gx + area.gw, area.gy);
     const n3 = isoToScreen(area.gx + area.gw, area.gy + 0.45);
     const n4 = isoToScreen(area.gx, area.gy + 0.45);
-    g.beginFill(0x000000, 0.09);
-    g.drawPolygon([n1.x, n1.y, n2.x, n2.y, n3.x, n3.y, n4.x, n4.y]);
-    g.endFill();
+    g.poly([n1.x, n1.y, n2.x, n2.y, n3.x, n3.y, n4.x, n4.y]);
+    g.fill({ color: 0x000000, alpha: 0.09 });
     const w1 = isoToScreen(area.gx, area.gy);
     const w2 = isoToScreen(area.gx, area.gy + area.gh);
     const w3 = isoToScreen(area.gx + 0.45, area.gy + area.gh);
     const w4 = isoToScreen(area.gx + 0.45, area.gy);
-    g.beginFill(0x000000, 0.09);
-    g.drawPolygon([w1.x, w1.y, w2.x, w2.y, w3.x, w3.y, w4.x, w4.y]);
-    g.endFill();
+    g.poly([w1.x, w1.y, w2.x, w2.y, w3.x, w3.y, w4.x, w4.y]);
+    g.fill({ color: 0x000000, alpha: 0.09 });
 
     // Daylight pools slanting in from the exterior windows (topmost band only).
     if (area.row === 0) {
@@ -123,20 +139,19 @@ function RoomFloor({ area }: { area: AreaLayout }) {
         const l2 = isoToScreen(wx + 1.3, area.gy);
         const l3 = isoToScreen(wx + 1.9, area.gy + 1.7);
         const l4 = isoToScreen(wx + 0.5, area.gy + 1.7);
-        g.beginFill(0xffffff, 0.12);
-        g.drawPolygon([l1.x, l1.y, l2.x, l2.y, l3.x, l3.y, l4.x, l4.y]);
-        g.endFill();
+        g.poly([l1.x, l1.y, l2.x, l2.y, l3.x, l3.y, l4.x, l4.y]);
+        g.fill({ color: 0xffffff, alpha: 0.12 });
       }
     }
   };
-  return <Graphics zIndex={-500} draw={draw} />;
+  return <pixiGraphics zIndex={-500} draw={draw} />;
 }
 
 /**
  * Room walls as per-tile segments so painter's sorting works: a character standing in front of a
  * wall segment (greater world depth) draws over it, one standing behind it (in a corridor/other
- * room) is hidden by it. North/west walls are full height, front/east walls are low parapets so
- * every room reads as an open box you look into - same construction as the reference image.
+ * room) is hidden by it. Exterior back/west walls are full height, interior partitions mid-height,
+ * front/east walls low parapets - every room reads as an open box you look into.
  */
 function RoomWalls({ area }: { area: AreaLayout }) {
   // Noticeably more saturated than the floor (lighten 0.45 vs 0.68-0.76) so wall faces read as
@@ -176,8 +191,8 @@ function RoomWalls({ area }: { area: AreaLayout }) {
     const c1 = isoToScreen(tx, area.gy - T);
     const c2 = isoToScreen(tx + 1, area.gy - T);
     if (northDoorCols.has(tx)) {
-      // Doorway through the full-height back wall: side jambs + lintel, with the gap showing the
-      // corridor behind - characters walk through this opening.
+      // Doorway through the back wall: side jambs + lintel, with the gap showing the corridor
+      // behind - characters walk through this opening.
       const j1 = isoToScreen(tx + 0.14, area.gy);
       const j2 = isoToScreen(tx + 0.86, area.gy);
       const t1 = isoToScreen(tx + 0.08, area.gy - 0.3);
@@ -190,18 +205,18 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         draw: (g) => {
           g.clear();
           // Threshold strip on the floor through the opening.
-          g.beginFill(threshold, 0.9);
-          g.drawPolygon([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
-          g.endFill();
+          g.poly([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
+          g.fill({ color: threshold, alpha: 0.9 });
           // Jambs (door frame posts), slightly taller than the wall they interrupt.
-          g.beginFill(doorFrame);
-          g.drawPolygon([p1.x, p1.y, j1.x, j1.y, j1.x, j1.y - northH - 2, p1.x, p1.y - northH - 2]);
-          g.drawPolygon([j2.x, j2.y, p2.x, p2.y, p2.x, p2.y - northH - 2, j2.x, j2.y - northH - 2]);
+          g.poly([p1.x, p1.y, j1.x, j1.y, j1.x, j1.y - northH - 2, p1.x, p1.y - northH - 2]);
+          g.fill(doorFrame);
+          g.poly([j2.x, j2.y, p2.x, p2.y, p2.x, p2.y - northH - 2, j2.x, j2.y - northH - 2]);
+          g.fill(doorFrame);
           // Lintel across the top (only on full-height walls; partitions stay open above).
           if (northH === WALL_H) {
-            g.drawPolygon([j1.x, j1.y - northH + LINTEL_H, j2.x, j2.y - northH + LINTEL_H, j2.x, j2.y - northH, j1.x, j1.y - northH]);
+            g.poly([j1.x, j1.y - northH + LINTEL_H, j2.x, j2.y - northH + LINTEL_H, j2.x, j2.y - northH, j1.x, j1.y - northH]);
+            g.fill(doorFrame);
           }
-          g.endFill();
         },
       });
     } else {
@@ -210,12 +225,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         z: isoDepth(tx + 0.5, area.gy) - 0.1,
         draw: (g) => {
           g.clear();
-          g.beginFill(north);
-          g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - northH, p1.x, p1.y - northH]);
-          g.endFill();
-          g.beginFill(cap);
-          g.drawPolygon([c1.x, c1.y - northH, c2.x, c2.y - northH, p2.x, p2.y - northH, p1.x, p1.y - northH]);
-          g.endFill();
+          g.poly([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - northH, p1.x, p1.y - northH]);
+          g.fill(north);
+          g.poly([c1.x, c1.y - northH, c2.x, c2.y - northH, p2.x, p2.y - northH, p1.x, p1.y - northH]);
+          g.fill(cap);
         },
       });
     }
@@ -237,13 +250,12 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
         draw: (g) => {
           g.clear();
-          g.beginFill(threshold, 0.9);
-          g.drawPolygon([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
-          g.endFill();
-          g.beginFill(doorFrame);
-          g.drawPolygon([q1.x, q1.y, s1.x, s1.y, s1.x, s1.y - PARAPET_H - 4, q1.x, q1.y - PARAPET_H - 4]);
-          g.drawPolygon([s2.x, s2.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H - 4, s2.x, s2.y - PARAPET_H - 4]);
-          g.endFill();
+          g.poly([t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t4.x, t4.y]);
+          g.fill({ color: threshold, alpha: 0.9 });
+          g.poly([q1.x, q1.y, s1.x, s1.y, s1.x, s1.y - PARAPET_H - 4, q1.x, q1.y - PARAPET_H - 4]);
+          g.fill(doorFrame);
+          g.poly([s2.x, s2.y, q2.x, q2.y, q2.x, q2.y - PARAPET_H - 4, s2.x, s2.y - PARAPET_H - 4]);
+          g.fill(doorFrame);
         },
       });
     } else {
@@ -252,12 +264,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
         z: isoDepth(tx + 0.5, area.gy + area.gh) - 0.1,
         draw: (g) => {
           g.clear();
-          g.beginFill(parapet);
-          g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-          g.endFill();
-          g.beginFill(cap);
-          g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-          g.endFill();
+          g.poly([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+          g.fill(parapet);
+          g.poly([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+          g.fill(cap);
         },
       });
     }
@@ -273,12 +283,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
       z: isoDepth(area.gx, ty + 0.5) - 0.1,
       draw: (g) => {
         g.clear();
-        g.beginFill(west);
-        g.drawPolygon([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - westH, p1.x, p1.y - westH]);
-        g.endFill();
-        g.beginFill(cap);
-        g.drawPolygon([c1.x, c1.y - westH, c2.x, c2.y - westH, p2.x, p2.y - westH, p1.x, p1.y - westH]);
-        g.endFill();
+        g.poly([p1.x, p1.y, p2.x, p2.y, p2.x, p2.y - westH, p1.x, p1.y - westH]);
+        g.fill(west);
+        g.poly([c1.x, c1.y - westH, c2.x, c2.y - westH, p2.x, p2.y - westH, p1.x, p1.y - westH]);
+        g.fill(cap);
       },
     });
 
@@ -291,12 +299,10 @@ function RoomWalls({ area }: { area: AreaLayout }) {
       z: isoDepth(area.gx + area.gw, ty + 0.5) - 0.1,
       draw: (g) => {
         g.clear();
-        g.beginFill(parapetSide);
-        g.drawPolygon([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-        g.endFill();
-        g.beginFill(cap);
-        g.drawPolygon([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
-        g.endFill();
+        g.poly([d1.x, d1.y, d2.x, d2.y, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+        g.fill(parapetSide);
+        g.poly([q1.x, q1.y - PARAPET_H, q2.x, q2.y - PARAPET_H, d2.x, d2.y - PARAPET_H, d1.x, d1.y - PARAPET_H]);
+        g.fill(cap);
       },
     });
   }
@@ -314,9 +320,8 @@ function RoomWalls({ area }: { area: AreaLayout }) {
       z: isoDepth(area.gx, area.gy) - 0.1,
       draw: (g) => {
         g.clear();
-        g.beginFill(cap);
-        g.drawPolygon([k1.x, k1.y - cornerH, k2.x, k2.y - cornerH, k3.x, k3.y - cornerH, k4.x, k4.y - cornerH]);
-        g.endFill();
+        g.poly([k1.x, k1.y - cornerH, k2.x, k2.y - cornerH, k3.x, k3.y - cornerH, k4.x, k4.y - cornerH]);
+        g.fill(cap);
       },
     });
   }
@@ -324,7 +329,7 @@ function RoomWalls({ area }: { area: AreaLayout }) {
   return (
     <>
       {segments.map((s) => (
-        <Graphics key={s.key} zIndex={s.z} draw={s.draw} />
+        <pixiGraphics key={s.key} zIndex={s.z} draw={s.draw} />
       ))}
     </>
   );
@@ -339,9 +344,9 @@ function ExteriorWindows({ area }: { area: AreaLayout }) {
       {positions.map((tx, i) => {
         const base = isoToScreen(tx, area.gy);
         return (
-          <Sprite
+          <pixiSprite
             key={i}
-            texture={WINDOW_TEXTURE}
+            texture={windowTexture()}
             x={base.x}
             y={base.y - 9}
             anchor={{ x: 0, y: 1 }}
@@ -367,17 +372,16 @@ function AreaFurniture({ area }: { area: AreaLayout }) {
         const z = isoDepth(wx, wy);
         const drawShadow = (g: PixiGraphics) => {
           g.clear();
-          g.beginFill(0x000000, 0.16);
-          g.drawEllipse(screen.x, screen.y + 2, 16, 5);
-          g.endFill();
+          g.ellipse(screen.x, screen.y + 2, 16, 5);
+          g.fill({ color: 0x000000, alpha: 0.16 });
         };
         // Direct siblings of the sortable world container (a wrapper Container would collapse
         // their depth to zIndex 0 and break occlusion against characters).
         return (
           <Fragment key={i}>
-            <Graphics zIndex={z - 0.01} draw={drawShadow} />
-            <Sprite
-              texture={FURNITURE_TEXTURES[placement.prop]}
+            <pixiGraphics zIndex={z - 0.01} draw={drawShadow} />
+            <pixiSprite
+              texture={furnitureTexture(placement.prop)}
               x={screen.x}
               y={screen.y + 4}
               anchor={{ x: 0.5, y: 1 }}
@@ -401,9 +405,9 @@ function AreaDecor({ area }: { area: AreaLayout }) {
         const wy = decor.cell.cy + 0.5;
         const screen = isoToScreen(wx, wy);
         return (
-          <Sprite
+          <pixiSprite
             key={i}
-            texture={FURNITURE_TEXTURES[decor.prop]}
+            texture={furnitureTexture(decor.prop)}
             x={screen.x}
             y={screen.y + 3}
             anchor={{ x: 0.5, y: 1 }}
@@ -432,9 +436,9 @@ function ExteriorTrees() {
       {EXTERIOR_TREES.map((tree, i) => {
         const screen = isoToScreen(tree.wx, tree.wy);
         return (
-          <Sprite
+          <pixiSprite
             key={i}
-            texture={FURNITURE_TEXTURES.plant}
+            texture={furnitureTexture("plant")}
             x={screen.x}
             y={screen.y + 3}
             anchor={{ x: 0.5, y: 1 }}
@@ -452,24 +456,22 @@ const ENTRANCE_SIGN_STYLE = new TextStyle({ fontSize: 13, fontWeight: "700", fil
 /** "Agentia" sign over the building's front entrance, like the reference's canopy. */
 function EntranceSign() {
   const anchor = isoToScreen(13.5, GRID_ROWS);
-  const metrics = TextMetrics.measureText("Agentia", ENTRANCE_SIGN_STYLE);
+  const metrics = CanvasTextMetrics.measureText("Agentia", ENTRANCE_SIGN_STYLE);
   const w = metrics.width + 24;
   const h = metrics.height + 8;
   const x = anchor.x - w / 2;
   const y = anchor.y - PARAPET_H - h - 6;
   const draw = (g: PixiGraphics) => {
     g.clear();
-    g.beginFill(0x4a3b2f, 0.97);
-    g.drawRoundedRect(x, y, w, h, 4);
-    g.endFill();
-    g.beginFill(0x4a3b2f, 0.97);
-    g.drawRect(anchor.x - 2, y + h, 4, 8);
-    g.endFill();
+    g.roundRect(x, y, w, h, 4);
+    g.fill({ color: 0x4a3b2f, alpha: 0.97 });
+    g.rect(anchor.x - 2, y + h, 4, 8);
+    g.fill({ color: 0x4a3b2f, alpha: 0.97 });
   };
   return (
     <>
-      <Graphics draw={draw} />
-      <Text text="Agentia" x={anchor.x} y={y + 4} anchor={{ x: 0.5, y: 0 }} style={ENTRANCE_SIGN_STYLE} />
+      <pixiGraphics draw={draw} />
+      <pixiText text="Agentia" x={anchor.x} y={y + 4} anchor={{ x: 0.5, y: 0 }} style={ENTRANCE_SIGN_STYLE} />
     </>
   );
 }
@@ -479,7 +481,7 @@ function EntranceSign() {
  * and clamped to the stage so edge rooms' plates never clip off-screen. */
 function RoomLabel({ area }: { area: AreaLayout }) {
   const text = `${area.icon} ${area.name}`;
-  const metrics = TextMetrics.measureText(text, AREA_LABEL_STYLE);
+  const metrics = CanvasTextMetrics.measureText(text, AREA_LABEL_STYLE);
   const anchor = isoToScreen(area.gx + area.gw / 2, area.gy + area.gh / 2);
   const w = metrics.width + 16;
   const h = metrics.height + 8;
@@ -487,14 +489,13 @@ function RoomLabel({ area }: { area: AreaLayout }) {
   const y = anchor.y - 44;
   const draw = (g: PixiGraphics) => {
     g.clear();
-    g.beginFill(shadeColor(area.color, 0.45), 0.95);
-    g.drawRoundedRect(x, y, w, h, 6);
-    g.endFill();
+    g.roundRect(x, y, w, h, 6);
+    g.fill({ color: shadeColor(area.color, 0.45), alpha: 0.95 });
   };
   return (
     <>
-      <Graphics draw={draw} />
-      <Text text={text} x={x + 8} y={y + 4} style={AREA_LABEL_STYLE} />
+      <pixiGraphics draw={draw} />
+      <pixiText text={text} x={x + 8} y={y + 4} style={AREA_LABEL_STYLE} />
     </>
   );
 }
@@ -535,38 +536,34 @@ function drawDashedWorldLine(
     g.lineTo(a.x + ux * e, a.y + uy * e);
     d = e + 7;
   }
-  g.lineStyle(0);
-  g.beginFill(0xeaf2ff, 0.9);
-  g.drawPolygon([b.x, b.y, b.x - ux * 12 + -uy * 5, b.y - uy * 12 + ux * 5, b.x - ux * 12 - -uy * 5, b.y - uy * 12 - ux * 5]);
-  g.endFill();
-  g.lineStyle(3, 0xeaf2ff, 0.9);
+  g.stroke({ width: 3, color: 0xeaf2ff, alpha: 0.9 });
+  g.poly([b.x, b.y, b.x - ux * 12 + -uy * 5, b.y - uy * 12 + ux * 5, b.x - ux * 12 - -uy * 5, b.y - uy * 12 - ux * 5]);
+  g.fill({ color: 0xeaf2ff, alpha: 0.9 });
 }
 
 /** Corridor flow arrows + numbered step badges (reference image's ①〜⑤ workflow overlay). */
 function FlowOverlay() {
   const drawLines = (g: PixiGraphics) => {
     g.clear();
-    g.lineStyle(3, 0xeaf2ff, 0.9);
     for (const line of FLOW_LINES) drawDashedWorldLine(g, line.from, line.to);
   };
   return (
     <>
-      <Graphics draw={drawLines} />
+      <pixiGraphics draw={drawLines} />
       {FLOW_STEPS.map((step) => {
         const p = isoToScreen(step.wx, step.wy);
         const drawBadge = (g: PixiGraphics) => {
           g.clear();
-          g.lineStyle(2, 0xffffff, 1);
-          g.beginFill(0x2f6fed);
-          g.drawCircle(p.x, p.y, 10);
-          g.endFill();
+          g.circle(p.x, p.y, 10);
+          g.fill(0x2f6fed);
+          g.stroke({ width: 2, color: 0xffffff });
         };
         return (
-          <Container key={step.n}>
-            <Graphics draw={drawBadge} />
-            <Text text={step.n} x={p.x} y={p.y} anchor={0.5} style={STEP_NUMBER_STYLE} />
-            <Text text={step.label} x={p.x + 15} y={p.y} anchor={{ x: 0, y: 0.5 }} style={STEP_LABEL_STYLE} />
-          </Container>
+          <pixiContainer key={step.n}>
+            <pixiGraphics draw={drawBadge} />
+            <pixiText text={step.n} x={p.x} y={p.y} anchor={0.5} style={STEP_NUMBER_STYLE} />
+            <pixiText text={step.label} x={p.x + 15} y={p.y} anchor={{ x: 0, y: 0.5 }} style={STEP_LABEL_STYLE} />
+          </pixiContainer>
         );
       })}
     </>
@@ -586,13 +583,36 @@ function CharacterLayer() {
 
 /**
  * docs/10_OFFICE_SYSTEM.md + docs/07 "カイロソフト風": the full 12-area floor rendered as a true
- * isometric diorama - diamond floor grid, height-cut walls with painter's-algorithm occlusion,
- * corridor arrows and floating name plates, with all movement happening in world (tile) space.
+ * isometric diorama on PixiJS v8 - WebGPU-first (automatic WebGL fallback), diamond floor grid,
+ * height-cut walls with painter's-algorithm occlusion, and A*-driven walking characters.
  */
 export function OfficeCanvas() {
+  // v8's Assets loader fetches every sprite up front; the stage mounts only once the cache is warm
+  // so all texture lookups inside the tree are synchronous.
+  const [assetsReady, setAssetsReady] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    loadOfficeAssets().then(() => {
+      if (mounted) setAssetsReady(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!assetsReady) {
+    return <div style={{ width: OFFICE_WIDTH, height: OFFICE_HEIGHT }} />;
+  }
+
   return (
-    <Stage width={OFFICE_WIDTH} height={OFFICE_HEIGHT} options={{ backgroundColor: 0xedeef2, antialias: false }}>
-      <Container sortableChildren>
+    <Application
+      width={OFFICE_WIDTH}
+      height={OFFICE_HEIGHT}
+      backgroundColor={0xedeef2}
+      antialias={false}
+      preference="webgpu"
+    >
+      <pixiContainer sortableChildren>
         <BaseFloor />
         {PHASE2_AREA_LAYOUT.map((area) => (
           <RoomFloor key={`floor-${area.areaId}`} area={area} />
@@ -611,14 +631,14 @@ export function OfficeCanvas() {
         ))}
         <ExteriorTrees />
         <CharacterLayer />
-      </Container>
-      <Container>
+      </pixiContainer>
+      <pixiContainer>
         <FlowOverlay />
         <EntranceSign />
         {PHASE2_AREA_LAYOUT.map((area) => (
           <RoomLabel key={`label-${area.areaId}`} area={area} />
         ))}
-      </Container>
-    </Stage>
+      </pixiContainer>
+    </Application>
   );
 }

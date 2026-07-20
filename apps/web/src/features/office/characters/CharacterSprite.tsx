@@ -1,15 +1,23 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { Container, Graphics, Sprite, Text } from "@pixi/react";
-import { useTick } from "@pixi/react";
-import { TextStyle, type Container as PixiContainer, type Graphics as PixiGraphics, type Sprite as PixiSprite } from "pixi.js";
+import { extend, useTick } from "@pixi/react";
+import {
+  Container,
+  Graphics,
+  Sprite,
+  Text,
+  TextStyle,
+  type Container as PixiContainer,
+  type Graphics as PixiGraphics,
+  type Sprite as PixiSprite,
+} from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
 import { useOfficeStore } from "@/stores/office-store";
 import { areaSlotFor } from "../map/map";
 import { findPath } from "../map/pathfinding";
 import { isoDepth, isoToScreen } from "../map/iso";
-import { characterTextures, poseForState, type Facing } from "../pixel-assets";
+import { characterTextures, poseForState, type CharacterPose, type Facing } from "../pixel-assets";
 import {
   AMBIENT_PAUSE_MAX_MS,
   AMBIENT_PAUSE_MIN_MS,
@@ -18,6 +26,8 @@ import {
   pickWanderTarget,
   type AmbientState,
 } from "./behavior";
+
+extend({ Container, Graphics, Sprite, Text });
 
 /** Movement happens in WORLD (tile) units over A* waypoints (pathfinding.ts); rendering converts per tick. */
 const WALK_SPEED_TILES_PER_MS = 0.005;
@@ -34,8 +44,17 @@ const DIRECTION_DEADZONE = 0.25;
  * 1.5 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
 const SPRITE_SCALE = 0.26;
 
+/** Walk-cycle frame rate: the sprite alternates walk1/walk2 in sync with the bounce (t * 13 rad/s
+ * ~= 2 steps per second), the classic Kairosoft two-frame shuffle. */
+const WALK_CYCLE_RATE = 13;
+
 const ICON_STYLE = new TextStyle({ fontSize: 12 });
-const NAME_STYLE = new TextStyle({ fontSize: 10, fill: 0x1a1d23, fontWeight: "600", stroke: 0xffffff, strokeThickness: 3 });
+const NAME_STYLE = new TextStyle({
+  fontSize: 10,
+  fill: 0x1a1d23,
+  fontWeight: "600",
+  stroke: { color: 0xffffff, width: 3 },
+});
 
 const ROLE_COLOR: Record<string, number> = {
   main: 0x1e88e5,
@@ -102,7 +121,8 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   /** STEP9 ambient stroll (break-room trip) progress - rendering-layer only. */
   const ambientRef = useRef<AmbientState>({ phase: "none", until: 0 });
 
-  useTick((delta) => {
+  useTick((ticker) => {
+    const delta = ticker.deltaTime;
     clockRef.current += delta;
     const now = Date.now();
 
@@ -183,17 +203,16 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     }
 
     const t = clockRef.current * 0.001;
-    /** 0..1 walk-cycle phase while moving, so the bounce/sway/shadow-squash all stay in lockstep
-     * (a proper "footstep" feel instead of independent wobbles), and settle back to neutral (0)
-     * the instant the character stops. */
-    const stepPhase = moving ? Math.abs(Math.sin(t * 13)) : 0;
+    /** 0..1 walk-cycle phase while moving, so the bounce/sway/shadow-squash and the two sprite
+     * frames all stay in lockstep (a proper "footstep" feel), settling to neutral when stopped. */
+    const stepPhase = moving ? Math.abs(Math.sin(t * WALK_CYCLE_RATE)) : 0;
 
     if (bodyGroupRef.current) {
       const sx = SPRITE_SCALE * mirrorRef.current;
       if (moving) {
-        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 26) * 0.06));
-        bodyGroupRef.current.position.y = 2 - stepPhase * 3;
-        bodyGroupRef.current.position.x = Math.sin(t * 13) * 1.6;
+        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * WALK_CYCLE_RATE * 2) * 0.04));
+        bodyGroupRef.current.position.y = 2 - stepPhase * 2.5;
+        bodyGroupRef.current.position.x = Math.sin(t * WALK_CYCLE_RATE) * 1.4;
       } else {
         bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
         bodyGroupRef.current.position.y = 2;
@@ -203,14 +222,17 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     if (shadowRef.current) {
       const shadowScale = 1 - stepPhase * 0.18;
       shadowRef.current.clear();
-      shadowRef.current.beginFill(0x000000, 0.2);
-      shadowRef.current.drawEllipse(0, 2, 10 * shadowScale, 4 * shadowScale);
-      shadowRef.current.endFill();
+      shadowRef.current.ellipse(0, 2, 10 * shadowScale, 4 * shadowScale);
+      shadowRef.current.fill({ color: 0x000000, alpha: 0.2 });
     }
 
-    // While walking, always use the neutral idle pose (no typing-in-midair); the state pose
-    // applies once the character has arrived (STEP4: walk animation distinct from work animation).
-    const pose = moving ? "idle" : poseForState(employee.state);
+    // Real two-frame walk animation while moving (legs/arms alternate, Kairosoft-style); the
+    // state pose applies once the character has arrived.
+    const pose: CharacterPose = moving
+      ? Math.sin(t * WALK_CYCLE_RATE) >= 0
+        ? "walk1"
+        : "walk2"
+      : poseForState(employee.state);
     const facedTextures = characterTextures(employee.avatarVariant, pose, facingRef.current);
     if (bodySpriteRef.current) bodySpriteRef.current.texture = facedTextures.body;
     if (detailsSpriteRef.current) detailsSpriteRef.current.texture = facedTextures.details;
@@ -223,9 +245,8 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
-    g.beginFill(0x000000, 0.2);
-    g.drawEllipse(0, 2, 10, 4);
-    g.endFill();
+    g.ellipse(0, 2, 10, 4);
+    g.fill({ color: 0x000000, alpha: 0.2 });
   };
 
   /** STEP10: white speech bubble with a tail, holding the state icon above the head. */
@@ -233,14 +254,11 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     (g: PixiGraphics) => {
       g.clear();
       if (!icon) return;
-      g.lineStyle(1, 0xb9bec9, 1);
-      g.beginFill(0xffffff, 0.96);
-      g.drawRoundedRect(-11, -62, 22, 20, 7);
-      g.endFill();
-      g.lineStyle(0);
-      g.beginFill(0xffffff, 0.96);
-      g.drawPolygon([-4, -43, 4, -43, 0, -37]);
-      g.endFill();
+      g.roundRect(-11, -62, 22, 20, 7);
+      g.fill({ color: 0xffffff, alpha: 0.96 });
+      g.stroke({ width: 1, color: 0xb9bec9 });
+      g.poly([-4, -43, 4, -43, 0, -37]);
+      g.fill({ color: 0xffffff, alpha: 0.96 });
     },
     [icon]
   );
@@ -248,23 +266,23 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const handleTap = useCallback(() => selectEmployee(employee.agentId), [selectEmployee, employee.agentId]);
 
   return (
-    <Container
+    <pixiContainer
       ref={outerRef}
       zIndex={isoDepth(initialPos.x, initialPos.y) + 0.02}
       eventMode="static"
       cursor="pointer"
-      pointerdown={handleTap}
+      onPointerDown={handleTap}
     >
-      <Graphics ref={shadowRef} draw={drawShadow} />
-      <Container ref={bodyGroupRef}>
+      <pixiGraphics ref={shadowRef} draw={drawShadow} />
+      <pixiContainer ref={bodyGroupRef}>
         {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
             (hair/skin/eyes/pants), so per-role/avatar tinting never discolors skin or hair. */}
-        <Sprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
-        <Sprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
-      </Container>
-      <Graphics draw={drawBubble} />
-      {icon && <Text text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}
-      <Text text={employee.displayName} x={0} y={7} anchor={{ x: 0.5, y: 0 }} style={NAME_STYLE} />
-    </Container>
+        <pixiSprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
+        <pixiSprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
+      </pixiContainer>
+      <pixiGraphics draw={drawBubble} />
+      {icon && <pixiText text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}
+      <pixiText text={employee.displayName} x={0} y={7} anchor={{ x: 0.5, y: 0 }} style={NAME_STYLE} />
+    </pixiContainer>
   );
 }

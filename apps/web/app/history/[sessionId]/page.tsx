@@ -1,5 +1,6 @@
 import { HistoryDetailScreen } from "@/features/history/HistoryDetailScreen";
 
-export default function HistoryDetailPage({ params }: { params: { sessionId: string } }) {
-  return <HistoryDetailScreen sessionId={params.sessionId} />;
+export default async function HistoryDetailPage({ params }: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId } = await params;
+  return <HistoryDetailScreen sessionId={sessionId} />;
 }

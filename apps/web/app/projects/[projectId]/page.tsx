@@ -1,5 +1,6 @@
 import { ProjectDetailScreen } from "@/features/projects/ProjectDetailScreen";
 
-export default function ProjectDetailPage({ params }: { params: { projectId: string } }) {
-  return <ProjectDetailScreen projectId={params.projectId} />;
+export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  return <ProjectDetailScreen projectId={projectId} />;
 }
