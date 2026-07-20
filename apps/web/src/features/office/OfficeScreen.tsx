@@ -120,7 +120,8 @@ export function OfficeScreen() {
   return (
     <AppShell>
       <div style={{ display: "flex", height: "100%" }}>
-        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", padding: "1rem" }}>
+        {/* Dark backdrop matching the canvas background so the diorama blends into the page. */}
+        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", padding: "1rem", background: "#1e222c" }}>
           {claudeCodeOffline && (
             <div
               style={{

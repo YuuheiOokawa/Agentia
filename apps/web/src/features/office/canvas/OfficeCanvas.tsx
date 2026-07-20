@@ -52,6 +52,13 @@ const STEP_NUMBER_STYLE = new TextStyle({ fontSize: 11, fontWeight: "700", fill:
 const FURNITURE_SCALE = 0.5;
 const WINDOW_SCALE = 0.26;
 
+/** Dark surroundings so the warm-lit interior pops like a night-time diorama: page/canvas
+ * background, then two subtle checker shades for the sidewalk apron ringing the building. */
+export const CANVAS_BACKGROUND = 0x1e222c;
+const APRON_SHADE_A = 0x2a2f3a;
+const APRON_SHADE_B = 0x262b35;
+const DOORMAT_COLOR = 0x4a505c;
+
 /** Traces one floor tile's diamond at world tile (tx, ty). */
 function tileDiamond(g: PixiGraphics, tx: number, ty: number): void {
   const top = isoToScreen(tx, ty);
@@ -75,31 +82,32 @@ function BaseFloor() {
             ? 0xd9d6cf
             : 0xcfccc4
           : (tx + ty) % 2 === 0
-            ? 0xe0e0de
-            : 0xd8d8d6;
+            ? APRON_SHADE_A
+            : APRON_SHADE_B;
         tileDiamond(g, tx, ty);
         g.fill(color);
       }
     }
 
-    // Building shadow onto the apron (south face, then east face).
+    // Building shadow onto the apron (south face, then east face) - a touch stronger so it still
+    // reads against the dark ground.
     const s1 = isoToScreen(0, GRID_ROWS);
     const s2 = isoToScreen(GRID_COLS, GRID_ROWS);
     const s3 = isoToScreen(GRID_COLS, GRID_ROWS + 0.8);
     const s4 = isoToScreen(0, GRID_ROWS + 0.8);
     g.poly([s1.x, s1.y, s2.x, s2.y, s3.x, s3.y, s4.x, s4.y]);
-    g.fill({ color: 0x000000, alpha: 0.1 });
+    g.fill({ color: 0x000000, alpha: 0.22 });
     const e1 = isoToScreen(GRID_COLS, 0);
     const e2 = isoToScreen(GRID_COLS, GRID_ROWS);
     const e3 = isoToScreen(GRID_COLS + 0.8, GRID_ROWS);
     const e4 = isoToScreen(GRID_COLS + 0.8, 0);
     g.poly([e1.x, e1.y, e2.x, e2.y, e3.x, e3.y, e4.x, e4.y]);
-    g.fill({ color: 0x000000, alpha: 0.1 });
+    g.fill({ color: 0x000000, alpha: 0.22 });
 
     // Entrance doormat centered on the building's front edge.
     const mat = isoToScreen(13.5, GRID_ROWS + 0.55);
     g.poly([mat.x - 20, mat.y, mat.x, mat.y - 10, mat.x + 20, mat.y, mat.x, mat.y + 10]);
-    g.fill(0x9b958d);
+    g.fill(DOORMAT_COLOR);
   };
   return <pixiGraphics zIndex={-1000} draw={draw} />;
 }
@@ -601,14 +609,14 @@ export function OfficeCanvas() {
   }, []);
 
   if (!assetsReady) {
-    return <div style={{ width: OFFICE_WIDTH, height: OFFICE_HEIGHT }} />;
+    return <div style={{ width: OFFICE_WIDTH, height: OFFICE_HEIGHT, background: "#1e222c" }} />;
   }
 
   return (
     <Application
       width={OFFICE_WIDTH}
       height={OFFICE_HEIGHT}
-      backgroundColor={0xedeef2}
+      backgroundColor={CANVAS_BACKGROUND}
       antialias={false}
       preference="webgpu"
     >
