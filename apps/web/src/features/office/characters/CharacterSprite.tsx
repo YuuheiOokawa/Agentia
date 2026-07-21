@@ -44,9 +44,9 @@ const MIN_SPEED_FACTOR = 0.28;
  * seconds instead of standing frozen - purely a rendering-layer flourish, not store state. */
 const WANDER_MIN_DELAY_MS = 1500;
 const WANDER_MAX_DELAY_MS = 4500;
-/** World-space deadzone below which the facing/mirror keeps its previous value, so near-diagonal
- * movement doesn't flicker between front/back or left/right every frame. */
-const DIRECTION_DEADZONE = 0.25;
+/** Screen-space (px) deadzone below which the facing/mirror keeps its previous value, so
+ * near-diagonal movement doesn't flicker between front/back or left/right every frame. */
+const SCREEN_DIRECTION_DEADZONE = 1.5;
 
 /** Generated 3D employee cells are 307x512; this produces a roughly 62px-tall office figure. */
 const SPRITE_SCALE = 0.13;
@@ -149,13 +149,20 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         moving = true;
         const dx = next.x - posRef.current.x;
         const dy = next.y - posRef.current.y;
-        // Screen-vertical component of the direction is (dx+dy), screen-horizontal is (dx-dy).
-        const screenDown = dx + dy;
-        const screenRight = dx - dy;
-        if (screenDown < -DIRECTION_DEADZONE) facingRef.current = "back";
-        else if (screenDown > DIRECTION_DEADZONE) facingRef.current = "front";
-        if (screenRight < -DIRECTION_DEADZONE) mirrorRef.current = -1;
-        else if (screenRight > DIRECTION_DEADZONE) mirrorRef.current = 1;
+        // Facing must be derived from the ACTUAL on-screen direction, not the flat (dx+dy)/(dx-dy)
+        // shortcut that only holds for the old linear isoToScreen projection. realisticToScreen is
+        // a bilinear warp onto the room's trapezoid, so "screen down"/"screen right" for a given
+        // world-space step varies with where in the room the character is; sample the projection
+        // at both ends of the step to get the true screen-space direction (mismatching this made
+        // characters walking a screen-horizontal path stay stuck facing "front" the whole time).
+        const fromScreen = realisticToScreen(posRef.current.x, posRef.current.y);
+        const toScreen = realisticToScreen(next.x, next.y);
+        const screenRight = toScreen.x - fromScreen.x;
+        const screenDown = toScreen.y - fromScreen.y;
+        if (screenDown < -SCREEN_DIRECTION_DEADZONE) facingRef.current = "back";
+        else if (screenDown > SCREEN_DIRECTION_DEADZONE) facingRef.current = "front";
+        if (screenRight < -SCREEN_DIRECTION_DEADZONE) mirrorRef.current = -1;
+        else if (screenRight > SCREEN_DIRECTION_DEADZONE) mirrorRef.current = 1;
 
         // Ease in from a standstill, ease out into the final stop (last leg only) - see
         // ACCEL_RAMP_MS/DECEL_TILES above for why intermediate waypoints skip the ease-out.
