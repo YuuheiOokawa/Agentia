@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DEFAULT_PROJECT_ROOT_STORAGE_KEY } from "@/lib/constants";
+import { COMPANY_VIEW_SENTINEL, DEFAULT_PROJECT_ROOT_STORAGE_KEY } from "@/lib/constants";
 import { resolveProjectId } from "@/lib/project";
 import { fetchProjects, type ProjectRecord } from "@/lib/api";
 
@@ -19,7 +19,10 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 
   hydrate: () => {
     if (get().projectRoot !== null) return;
-    set({ projectRoot: window.localStorage.getItem(DEFAULT_PROJECT_ROOT_STORAGE_KEY) ?? "" });
+    // First-ever visit (nothing in localStorage yet): default to the shared company-wide office
+    // instead of a single project, per docs/10_OFFICE_SYSTEM.md - "one project at a time" is now
+    // an opt-in narrowing via the ProjectSwitcher, not the default.
+    set({ projectRoot: window.localStorage.getItem(DEFAULT_PROJECT_ROOT_STORAGE_KEY) ?? COMPANY_VIEW_SENTINEL });
   },
 
   setProjectRoot: (root) => {
@@ -38,5 +41,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 }));
 
 export function currentProjectId(projectRoot: string | null): string | null {
-  return projectRoot ? resolveProjectId(projectRoot) : null;
+  if (!projectRoot) return null;
+  if (projectRoot === COMPANY_VIEW_SENTINEL) return COMPANY_VIEW_SENTINEL;
+  return resolveProjectId(projectRoot);
 }

@@ -18,6 +18,7 @@ function createEmployee(event: InternalEvent): Employee {
   return {
     agentId: event.agentId,
     sessionId: event.sessionId,
+    projectId: event.projectId,
     parentAgentId: event.parentAgentId,
     role: event.agentType,
     displayName: event.displayName,

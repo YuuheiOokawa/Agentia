@@ -29,6 +29,10 @@ export type MovementStep = z.infer<typeof MovementStepSchema>;
 export const EmployeeSchema = z.object({
   agentId: z.string(),
   sessionId: z.string(),
+  /** Which project this employee's session belongs to - populated for the company-wide office
+   * view (docs/10_OFFICE_SYSTEM.md) so characters from different projects can be labeled/
+   * distinguished when sharing one office. Absent is treated the same as "unknown project". */
+  projectId: z.string().optional(),
   parentAgentId: z.string().nullable(),
   role: z.enum(EMPLOYEE_ROLES),
   displayName: z.string(),

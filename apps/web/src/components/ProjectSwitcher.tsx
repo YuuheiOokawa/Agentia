@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { COMPANY_VIEW_SENTINEL } from "@/lib/constants";
 import { useProjectStore } from "@/stores/project-store";
 
 /** docs/08_SCREEN_DESIGN.md #9: sidebar project switcher, shared across every screen. */
@@ -18,9 +19,7 @@ export function ProjectSwitcher() {
 
   if (projectRoot === null) return null;
 
-  if (projects.length === 0) {
-    return <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", padding: "0 0.5rem" }}>プロジェクト未登録</p>;
-  }
+  const isKnownProject = projects.some((p) => p.rootPath === projectRoot);
 
   return (
     <select
@@ -35,7 +34,9 @@ export function ProjectSwitcher() {
         border: "1px solid var(--border)",
       }}
     >
-      {!projects.some((p) => p.rootPath === projectRoot) && <option value={projectRoot}>{projectRoot}</option>}
+      {/* docs/10_OFFICE_SYSTEM.md: everyone sharing one office is the default, not a per-project silo. */}
+      <option value={COMPANY_VIEW_SENTINEL}>全社(すべてのプロジェクト)</option>
+      {!isKnownProject && projectRoot !== COMPANY_VIEW_SENTINEL && <option value={projectRoot}>{projectRoot}</option>}
       {projects.map((p) => (
         <option key={p.projectId} value={p.rootPath}>
           {p.name}

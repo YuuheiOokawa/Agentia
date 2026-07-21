@@ -19,3 +19,11 @@ export const EVENT_PRIORITY_IDLE = 10;
 export const ACTIVITY_LOG_MAX_ENTRIES = 500;
 
 export const DEFAULT_PROJECT_ROOT_STORAGE_KEY = "agentia.projectRoot";
+
+/**
+ * Sentinel "project root" meaning "every project, sharing one office" (docs/10_OFFICE_SYSTEM.md
+ * company-wide view) rather than one project at a time - mirrors the server's ws/hub.ts
+ * COMPANY_CHANNEL constant. Stored/compared as a plain string since projectRoot is user-editable
+ * free text everywhere else in the store.
+ */
+export const COMPANY_VIEW_SENTINEL = "__company__";

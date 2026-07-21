@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { SERVER_HTTP_URL } from "@/lib/constants";
+import { COMPANY_VIEW_SENTINEL, SERVER_HTTP_URL } from "@/lib/constants";
 import { useProjectStore } from "@/stores/project-store";
 
 interface StatusResponse {
@@ -21,6 +21,10 @@ export function ConnectionSettingsScreen() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [setupResult, setSetupResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Hooks are wired up per real project directory - the "全社" aggregated view has no single
+  // .claude/settings.json to read or write, so treat it the same as "nothing picked yet" here.
+  const isCompanyView = projectRoot === COMPANY_VIEW_SENTINEL;
+  const effectiveProjectRoot = isCompanyView ? null : projectRoot;
 
   useEffect(() => hydrate(), [hydrate]);
 
@@ -31,12 +35,13 @@ export function ConnectionSettingsScreen() {
   }
 
   useEffect(() => {
-    if (projectRoot !== null) void refreshStatus(projectRoot);
+    if (effectiveProjectRoot !== null) void refreshStatus(effectiveProjectRoot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectRoot !== null]);
+  }, [effectiveProjectRoot]);
 
   async function handleSetup() {
-    if (projectRoot === null) return;
+    if (effectiveProjectRoot === null) return;
+    const projectRoot = effectiveProjectRoot;
     setBusy(true);
     setSetupResult(null);
     try {
@@ -93,21 +98,23 @@ export function ConnectionSettingsScreen() {
         <label style={{ display: "block", fontSize: "0.85rem", marginTop: "1rem" }}>
           プロジェクトのルートパス(Claude Codeを起動しているディレクトリ)
           <input
-            value={projectRoot ?? ""}
+            value={isCompanyView ? "" : (projectRoot ?? "")}
             onChange={(e) => saveProjectRoot(e.target.value)}
-            placeholder="/home/user/my-project"
+            placeholder={isCompanyView ? "全社ビュー表示中 - Hooksを設定するプロジェクトのパスを入力" : "/home/user/my-project"}
             style={{ display: "block", width: "100%", marginTop: 4, padding: "0.4rem 0.5rem" }}
           />
         </label>
 
         <p style={{ fontSize: "0.85rem", marginTop: "1rem" }}>
           .claude/settings.json:{" "}
-          {status?.hooksStatus === "configured" && <strong>● 設定済み</strong>}
-          {status?.hooksStatus === "missing" && <strong>⚠ Hooks未設定</strong>}
-          {(!status || status.hooksStatus === "unknown") && "プロジェクトパスを入力してください"}
+          {!isCompanyView && status?.hooksStatus === "configured" && <strong>● 設定済み</strong>}
+          {!isCompanyView && status?.hooksStatus === "missing" && <strong>⚠ Hooks未設定</strong>}
+          {isCompanyView
+            ? "全社ビューはプロジェクト横断の表示のため設定対象がありません。上に個別プロジェクトのパスを入力してください"
+            : (!status || status.hooksStatus === "unknown") && "プロジェクトパスを入力してください"}
         </p>
 
-        <button disabled={busy || !projectRoot} onClick={handleSetup} style={{ marginRight: 8 }}>
+        <button disabled={busy || !effectiveProjectRoot} onClick={handleSetup} style={{ marginRight: 8 }}>
           ワンクリックで設定を追加
         </button>
         <button disabled={busy} onClick={handleTest}>

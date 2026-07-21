@@ -10,6 +10,12 @@ import type { SessionManager } from "../core/session-manager.js";
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
+/**
+ * Special "projectId" a client subscribes with to see every project's employees sharing one
+ * office (docs/10_OFFICE_SYSTEM.md "company-wide" view) instead of one project at a time.
+ */
+export const COMPANY_CHANNEL = "__company__";
+
 interface Client {
   socket: WebSocket;
   projectId: string;
@@ -37,9 +43,12 @@ export function registerWebSocketHub(fastify: FastifyInstance, sessionManager: S
   }
 
   sessionManager.on("event", (projectId: string, _sessionId: string, event: InternalEvent) => {
+    const message: ServerMessage = { type: "EVENT", seq: event.seq, event };
     const set = clientsByProject.get(projectId);
-    if (!set) return;
-    for (const client of set) send(client.socket, { type: "EVENT", seq: event.seq, event });
+    if (set) for (const client of set) send(client.socket, message);
+    // Company-wide subscribers see every project's stream, in addition to their own project's set.
+    const companySet = clientsByProject.get(COMPANY_CHANNEL);
+    if (companySet) for (const client of companySet) send(client.socket, message);
   });
 
   const heartbeat = setInterval(() => {
@@ -52,6 +61,36 @@ export function registerWebSocketHub(fastify: FastifyInstance, sessionManager: S
     done();
   });
 
+  /**
+   * Sends whatever a freshly (re)subscribed client needs to catch up: for the company channel
+   * there's no single session's ring buffer to replay against, so it always gets a full snapshot
+   * across every project; a single-project client still gets the cheaper REPLAY-by-seq path.
+   */
+  function sendInitialState(socket: WebSocket, projectId: string, lastSeq: number): void {
+    if (projectId === COMPANY_CHANNEL) {
+      sendSnapshot(socket, sessionManager.listAllEmployees());
+      return;
+    }
+
+    const activeSessionId = sessionManager.getActiveSessionId(projectId);
+    if (!activeSessionId) return;
+
+    if (lastSeq > 0) {
+      const missed = sessionManager.getRingBuffer().since(activeSessionId, lastSeq);
+      if (missed && missed.length > 0) {
+        send(socket, {
+          type: "REPLAY",
+          events: missed.map((event) => ({ type: "EVENT" as const, seq: event.seq, event })),
+        });
+      } else if (missed === null) {
+        // Gap too large to replay: fall back to a full snapshot of current employee state.
+        sendSnapshot(socket, sessionManager.listEmployees(activeSessionId));
+      }
+    } else {
+      sendSnapshot(socket, sessionManager.listEmployees(activeSessionId));
+    }
+  }
+
   fastify.get("/ws", { websocket: true }, (socket, req) => {
     const url = new URL(req.url ?? "/ws", "http://localhost");
     const projectId = url.searchParams.get("projectId") ?? "proj_default";
@@ -61,24 +100,7 @@ export function registerWebSocketHub(fastify: FastifyInstance, sessionManager: S
     subscribe(client);
 
     send(socket, { type: "HELLO", serverTime: new Date().toISOString(), lastSeq, protocolVersion: "1.0" });
-
-    const activeSessionId = sessionManager.getActiveSessionId(projectId);
-    if (activeSessionId) {
-      if (lastSeq > 0) {
-        const missed = sessionManager.getRingBuffer().since(activeSessionId, lastSeq);
-        if (missed && missed.length > 0) {
-          send(socket, {
-            type: "REPLAY",
-            events: missed.map((event) => ({ type: "EVENT" as const, seq: event.seq, event })),
-          });
-        } else if (missed === null) {
-          // Gap too large to replay: fall back to a full snapshot of current employee state.
-          sendSnapshot(socket, sessionManager.listEmployees(activeSessionId));
-        }
-      } else {
-        sendSnapshot(socket, sessionManager.listEmployees(activeSessionId));
-      }
-    }
+    sendInitialState(socket, projectId, lastSeq);
 
     socket.on("message", (raw: Buffer) => {
       const parsed = ClientMessageSchema.safeParse(JSON.parse(raw.toString("utf8")));
@@ -87,8 +109,7 @@ export function registerWebSocketHub(fastify: FastifyInstance, sessionManager: S
         unsubscribe(client);
         client.projectId = parsed.data.projectId;
         subscribe(client);
-        const sessionId = sessionManager.getActiveSessionId(client.projectId);
-        if (sessionId) sendSnapshot(socket, sessionManager.listEmployees(sessionId));
+        sendInitialState(socket, client.projectId, 0);
       }
       // ACK messages are informational only in the MVP (docs/06 #2.1); no server-side action needed yet.
     });

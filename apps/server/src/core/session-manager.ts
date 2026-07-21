@@ -125,7 +125,24 @@ export class SessionManager extends EventEmitter {
 
   /** Current employees for a session, used to build SNAPSHOT on (re)connect (docs/06 #2.1). */
   listEmployees(sessionId: string): Employee[] {
-    return Array.from(this.sessions.get(sessionId)?.employees.values() ?? []);
+    const runtime = this.sessions.get(sessionId);
+    if (!runtime) return [];
+    return Array.from(runtime.employees.values()).map((employee) => ({ ...employee, projectId: runtime.projectId }));
+  }
+
+  /**
+   * Every employee across every currently-tracked session, regardless of project - backs the
+   * company-wide office view (docs/10_OFFICE_SYSTEM.md) so employees from different projects can
+   * share one office instead of each project getting its own siloed view.
+   */
+  listAllEmployees(): Employee[] {
+    const all: Employee[] = [];
+    for (const runtime of this.sessions.values()) {
+      for (const employee of runtime.employees.values()) {
+        all.push({ ...employee, projectId: runtime.projectId });
+      }
+    }
+    return all;
   }
 
   /** Most recently active session for a project, used to pick which session a new WS client observes. */

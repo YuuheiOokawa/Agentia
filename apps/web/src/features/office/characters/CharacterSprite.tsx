@@ -14,6 +14,7 @@ import {
 } from "pixi.js";
 import type { AreaId, Employee } from "@agentia/shared-types";
 import { useOfficeStore } from "@/stores/office-store";
+import { useProjectStore } from "@/stores/project-store";
 import { areaSlotFor } from "../map/map";
 import { findPath } from "../map/pathfinding";
 import { isoDepth, realisticToScreen } from "../map/iso";
@@ -74,6 +75,14 @@ const NAME_STYLE = new TextStyle({
   fontWeight: "600",
   stroke: { color: 0xffffff, width: 3 },
 });
+/** Small muted tag under the name showing which project this employee belongs to - the
+ * company-wide office (docs/10_OFFICE_SYSTEM.md) mixes employees from every project on one
+ * floor, so this is the only visual cue distinguishing who's working on what. */
+const PROJECT_LABEL_STYLE = new TextStyle({
+  fontSize: 8,
+  fill: 0x5b6472,
+  stroke: { color: 0xffffff, width: 3 },
+});
 
 /** STEP10: what the speech bubble above the head shows per state (empty = no bubble). */
 const STATE_ICON: Record<string, string> = {
@@ -99,6 +108,7 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
 
 export function CharacterSprite({ employee }: { employee: Employee }) {
   const selectEmployee = useOfficeStore((s) => s.selectEmployee);
+  const projectName = useProjectStore((s) => s.projects.find((p) => p.projectId === employee.projectId)?.name ?? null);
   const initialPos = useRef(areaSlotFor(employee.areaId, employee.agentId)).current;
 
   const outerRef = useRef<PixiContainer | null>(null);
@@ -306,6 +316,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       <pixiGraphics draw={drawBubble} />
       {icon && <pixiText text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}
       <pixiText text={employee.displayName} x={0} y={7} anchor={{ x: 0.5, y: 0 }} style={NAME_STYLE} />
+      {projectName && <pixiText text={projectName} x={0} y={19} anchor={{ x: 0.5, y: 0 }} style={PROJECT_LABEL_STYLE} />}
     </pixiContainer>
   );
 }
