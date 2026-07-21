@@ -32,6 +32,14 @@ extend({ Container, Graphics, Sprite, Text });
 /** Movement happens in WORLD (tile) units over A* waypoints (pathfinding.ts); rendering converts per tick. */
 const WALK_SPEED_TILES_PER_MS = 0.005;
 const ARRIVAL_EPSILON_TILES = 0.08;
+/** Time to ramp from a standstill to full walk speed - an instant 0-to-full-speed step reads as
+ * a teleport-ish twitch, especially over the short hops between adjacent desks. */
+const ACCEL_RAMP_MS = 260;
+/** Distance-to-goal (tiles) over which the character eases into its final stop, only on the last
+ * leg of a path - intermediate waypoints (mid-corridor turns) keep full speed so a straight
+ * corridor walk still glides in one motion instead of braking at every compressed waypoint. */
+const DECEL_TILES = 0.55;
+const MIN_SPEED_FACTOR = 0.28;
 /** docs/10_OFFICE_SYSTEM.md #6 (liveliness): idle/waiting/completed characters roam every few
  * seconds instead of standing frozen - purely a rendering-layer flourish, not store state. */
 const WANDER_MIN_DELAY_MS = 1500;
@@ -98,6 +106,12 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
   const mirrorRef = useRef<1 | -1>(1);
   /** STEP9 ambient stroll (break-room trip) progress - rendering-layer only. */
   const ambientRef = useRef<AmbientState>({ phase: "none", until: 0 });
+  /** 0..1 ease-in ramp since the current walk began; reset to 0 the instant the character stops. */
+  const speedRampRef = useRef(0);
+  /** Actual current speed as a 0..1 fraction of full walk speed (accel ramp x arrival decel) -
+   * drives the walk-cycle bounce amplitude so the feet don't flutter at full amplitude while the
+   * body is still easing in/out (a mismatch that reads as feet sliding under a slow-moving body). */
+  const currentSpeedFactorRef = useRef(0);
 
   useTick((ticker) => {
     const delta = ticker.deltaTime;
@@ -142,7 +156,17 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
         else if (screenDown > DIRECTION_DEADZONE) facingRef.current = "front";
         if (screenRight < -DIRECTION_DEADZONE) mirrorRef.current = -1;
         else if (screenRight > DIRECTION_DEADZONE) mirrorRef.current = 1;
-        const step = Math.min(dist, WALK_SPEED_TILES_PER_MS * delta * 16.6667);
+
+        // Ease in from a standstill, ease out into the final stop (last leg only) - see
+        // ACCEL_RAMP_MS/DECEL_TILES above for why intermediate waypoints skip the ease-out.
+        speedRampRef.current = Math.min(1, speedRampRef.current + (delta * 16.6667) / ACCEL_RAMP_MS);
+        const accelFactor = speedRampRef.current * (2 - speedRampRef.current); // ease-out-quad ramp-up
+        const isFinalLeg = pathRef.current.length === 1;
+        const decelFactor = isFinalLeg ? Math.max(MIN_SPEED_FACTOR, Math.min(1, dist / DECEL_TILES)) : 1;
+        const speedFactor = accelFactor * decelFactor;
+        currentSpeedFactorRef.current = speedFactor;
+
+        const step = Math.min(dist, WALK_SPEED_TILES_PER_MS * delta * 16.6667 * speedFactor);
         const ratio = step / dist;
         posRef.current = { x: posRef.current.x + dx * ratio, y: posRef.current.y + dy * ratio };
       }
@@ -171,7 +195,11 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
 
     // Stationary characters in a working state face their desk (we see their back, seated at the
     // monitor); everyone else turns toward the viewer.
-    if (!moving) facingRef.current = poseForState(employee.state) === "working" ? "back" : "front";
+    if (!moving) {
+      facingRef.current = poseForState(employee.state) === "working" ? "back" : "front";
+      speedRampRef.current = 0; // next walk starts the ease-in fresh, not mid-ramp.
+      currentSpeedFactorRef.current = 0;
+    }
 
     if (outerRef.current) {
       const screen = realisticToScreen(posRef.current.x, posRef.current.y);
@@ -181,16 +209,18 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     }
 
     const t = clockRef.current * 0.001;
-    /** 0..1 walk-cycle phase while moving, so the bounce/sway/shadow-squash and the two sprite
-     * frames all stay in lockstep (a proper "footstep" feel), settling to neutral when stopped. */
-    const stepPhase = moving ? Math.abs(Math.sin(t * WALK_CYCLE_RATE)) : 0;
+    /** 0..1 walk-cycle phase while moving, scaled by the current speed factor so a character
+     * easing into/out of a step doesn't flap its feet at full amplitude while barely gliding -
+     * settling to neutral when stopped. */
+    const stepPhase = moving ? Math.abs(Math.sin(t * WALK_CYCLE_RATE)) * currentSpeedFactorRef.current : 0;
 
     if (bodyGroupRef.current) {
       const sx = SPRITE_SCALE * mirrorRef.current;
       if (moving) {
-        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * WALK_CYCLE_RATE * 2) * 0.04));
+        const swayAmount = currentSpeedFactorRef.current;
+        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * WALK_CYCLE_RATE * 2) * 0.04 * swayAmount));
         bodyGroupRef.current.position.y = 2 - stepPhase * 2.5;
-        bodyGroupRef.current.position.x = Math.sin(t * WALK_CYCLE_RATE) * 1.4;
+        bodyGroupRef.current.position.x = Math.sin(t * WALK_CYCLE_RATE) * 1.4 * swayAmount;
       } else {
         bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
         bodyGroupRef.current.position.y = 2;
