@@ -18,8 +18,21 @@ export interface ProjectRecord {
  * (docs/14_BACKEND_DESIGN.md #6), so it must never make the ingest response wait on a DB
  * round-trip. Writes are fire-and-forget; call init() once at startup to warm the cache.
  */
+/**
+ * Windows paths are case-insensitive and accept both separators ("C:\foo" === "c:/foo"), but
+ * Claude Code hook payloads report `cwd` verbatim from the shell that launched the session -
+ * different terminals/sessions can report the same directory with different drive-letter casing.
+ * Comparing rootPath as an exact string (as the DB's `rootPath @unique` does) then splits one
+ * real project into multiple rows, each with its own stale lastSeenAt/isActive state.
+ */
+function normalizeRootKey(rootPath: string): string {
+  return rootPath.replace(/\\/g, "/").toLowerCase();
+}
+
 export class ProjectRegistry {
   private readonly byRoot = new Map<string, ProjectRecord>();
+  /** normalizeRootKey(rootPath) -> the exact rootPath string used as the byRoot key (first-seen casing wins). */
+  private readonly keyByNormalizedRoot = new Map<string, string>();
   private pendingWrite: Promise<unknown> = Promise.resolve();
 
   private trackWrite(write: Promise<unknown>): void {
@@ -42,13 +55,15 @@ export class ProjectRegistry {
         createdAt: row.createdAt.toISOString(),
         lastSeenAt: row.lastSeenAt.toISOString(),
       });
+      this.keyByNormalizedRoot.set(normalizeRootKey(row.rootPath), row.rootPath);
     }
   }
 
   /** Resolves (and registers, if unseen) the project for a given Claude Code cwd. */
   resolveByRoot(rootPath: string): ProjectRecord {
     const nowIso = new Date().toISOString();
-    const existing = this.byRoot.get(rootPath);
+    const canonicalRoot = this.keyByNormalizedRoot.get(normalizeRootKey(rootPath));
+    const existing = canonicalRoot ? this.byRoot.get(canonicalRoot) : undefined;
     if (existing) {
       existing.lastSeenAt = nowIso;
       this.trackWrite(prisma.project.update({ where: { id: existing.projectId }, data: { lastSeenAt: new Date(nowIso) } }));
@@ -65,6 +80,7 @@ export class ProjectRegistry {
       lastSeenAt: nowIso,
     };
     this.byRoot.set(rootPath, record);
+    this.keyByNormalizedRoot.set(normalizeRootKey(rootPath), rootPath);
     this.trackWrite(
       prisma.project.create({ data: { id: projectId, name: record.name, rootPath, createdAt: new Date(nowIso), lastSeenAt: new Date(nowIso) } })
     );
