@@ -18,7 +18,6 @@ export const GRID_ROWS = 19;
 /** Wide enough for the 2-tile sidewalk apron + exterior planting drawn around the building. */
 const MARGIN_X = 66;
 const MARGIN_TOP = WALL_H + 34;
-const MARGIN_BOTTOM = 56;
 
 /** How many tiles of grey sidewalk ring the building (docs/07: grounds the diorama like the reference). */
 export const APRON_TILES = 2;
@@ -27,13 +26,41 @@ export const APRON_TILES = 2;
 export const ORIGIN_X = MARGIN_X + GRID_ROWS * (TILE_W / 2);
 export const ORIGIN_Y = MARGIN_TOP;
 
-export const OFFICE_WIDTH = ORIGIN_X + GRID_COLS * (TILE_W / 2) + MARGIN_X;
-export const OFFICE_HEIGHT = ORIGIN_Y + (GRID_COLS + GRID_ROWS) * (TILE_H / 2) + MARGIN_BOTTOM;
+/** 3:2 stage matching the generated architectural background. */
+export const OFFICE_WIDTH = 1200;
+export const OFFICE_HEIGHT = 800;
 
 export function isoToScreen(wx: number, wy: number): { x: number; y: number } {
   return {
     x: ORIGIN_X + (wx - wy) * (TILE_W / 2),
     y: ORIGIN_Y + (wx + wy) * (TILE_H / 2),
+  };
+}
+
+/**
+ * Projects the existing 27x19 navigation grid onto the visible floor quadrilateral in the
+ * high-resolution architectural background. This keeps A* movement and area assignments intact
+ * while allowing the visual layer to use a more top-down, realistic camera than the old 2:1 grid.
+ */
+export function realisticToScreen(wx: number, wy: number): { x: number; y: number } {
+  const u = Math.min(1, Math.max(0, wx / GRID_COLS));
+  const v = Math.min(1, Math.max(0, wy / GRID_ROWS));
+  const backLeft = { x: 191, y: 70 };
+  const backRight = { x: 1090, y: 133 };
+  const frontRight = { x: 883, y: 703 };
+  const frontLeft = { x: 266, y: 703 };
+
+  return {
+    x:
+      backLeft.x * (1 - u) * (1 - v) +
+      backRight.x * u * (1 - v) +
+      frontRight.x * u * v +
+      frontLeft.x * (1 - u) * v,
+    y:
+      backLeft.y * (1 - u) * (1 - v) +
+      backRight.y * u * (1 - v) +
+      frontRight.y * u * v +
+      frontLeft.y * (1 - u) * v,
   };
 }
 

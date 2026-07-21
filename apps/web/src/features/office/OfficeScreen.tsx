@@ -108,6 +108,7 @@ export function OfficeScreen() {
   // this component only needs to know whether that hydration has completed yet.
   const projectRoot = useProjectStore((s) => s.projectRoot);
   const claudeCodeOffline = useOfficeStore((s) => s.claudeCodeOffline);
+  const activeEmployees = useOfficeStore((s) => Object.keys(s.employees).length);
 
   if (projectRoot === null) {
     return (
@@ -121,7 +122,68 @@ export function OfficeScreen() {
     <AppShell>
       <div style={{ display: "flex", height: "100%" }}>
         {/* Dark backdrop matching the canvas background so the diorama blends into the page. */}
-        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", padding: "1rem", background: "#1e222c" }}>
+        <div
+          style={{
+            flex: 1,
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "auto",
+            padding: "1.5rem",
+            background: "radial-gradient(circle at 50% 32%, #313947 0%, #202631 48%, #171b23 100%)",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              left: 22,
+              top: 18,
+              zIndex: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "0.55rem 0.75rem",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 10,
+              background: "rgba(17, 22, 30, 0.82)",
+              boxShadow: "0 8px 28px rgba(0,0,0,0.28)",
+              backdropFilter: "blur(10px)",
+              color: "#eef4ff",
+            }}
+          >
+            <div
+              style={{
+                width: 30,
+                height: 30,
+                display: "grid",
+                placeItems: "center",
+                borderRadius: 8,
+                background: "linear-gradient(145deg, #4b8dff, #2457c6)",
+                boxShadow: "0 0 18px rgba(75,141,255,0.32)",
+                fontWeight: 800,
+              }}
+            >
+              A
+            </div>
+            <div>
+              <div style={{ fontSize: "0.72rem", color: "#93a2b8", letterSpacing: "0.12em" }}>
+                AGENTIA OPERATIONS CENTER
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2, fontSize: "0.78rem" }}>
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: claudeCodeOffline ? "#ff6b6b" : "#62dc8f",
+                    boxShadow: claudeCodeOffline ? "0 0 9px #ff6b6b" : "0 0 9px #62dc8f",
+                  }}
+                />
+                {claudeCodeOffline ? "OFFLINE" : "LIVE"} · {activeEmployees} AGENTS
+              </div>
+            </div>
+          </div>
           {claudeCodeOffline && (
             <div
               style={{
@@ -142,15 +204,44 @@ export function OfficeScreen() {
         </div>
         <aside
           style={{
-            width: 300,
-            borderLeft: "1px solid var(--border)",
-            background: "var(--panel-bg)",
-            padding: "1rem",
+            width: 324,
+            borderLeft: "1px solid rgba(111, 130, 158, 0.24)",
+            background: "linear-gradient(180deg, #171d27 0%, #111720 100%)",
+            color: "#edf3fb",
+            padding: "1.1rem",
             overflowY: "auto",
             flexShrink: 0,
+            boxShadow: "-10px 0 30px rgba(0,0,0,0.18)",
           }}
         >
           <h3 style={{ fontSize: "0.9rem", margin: "0 0 0.5rem" }}>現在の作業</h3>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0.7rem 0 0.85rem",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+              marginBottom: "0.8rem",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "0.68rem", color: "#7f91a9", letterSpacing: "0.1em" }}>WORKFORCE</div>
+              <strong style={{ fontSize: "0.92rem" }}>Live operations</strong>
+            </div>
+            <span
+              style={{
+                padding: "0.25rem 0.5rem",
+                borderRadius: 999,
+                background: "rgba(98,220,143,0.12)",
+                color: "#78e6a0",
+                fontSize: "0.72rem",
+                border: "1px solid rgba(98,220,143,0.2)",
+              }}
+            >
+              {activeEmployees} active
+            </span>
+          </div>
           <CurrentTaskCards />
           <h3 style={{ fontSize: "0.9rem", margin: "1.25rem 0 0.5rem" }}>アクティビティログ</h3>
           <ActivityLogList />

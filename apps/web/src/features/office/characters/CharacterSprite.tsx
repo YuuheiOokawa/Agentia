@@ -16,8 +16,8 @@ import type { AreaId, Employee } from "@agentia/shared-types";
 import { useOfficeStore } from "@/stores/office-store";
 import { areaSlotFor } from "../map/map";
 import { findPath } from "../map/pathfinding";
-import { isoDepth, isoToScreen } from "../map/iso";
-import { characterTextures, poseForState, type CharacterPose, type Facing } from "../pixel-assets";
+import { isoDepth, realisticToScreen } from "../map/iso";
+import { poseForState, realisticCharacterTexture, type Facing } from "../pixel-assets";
 import {
   AMBIENT_PAUSE_MAX_MS,
   AMBIENT_PAUSE_MIN_MS,
@@ -40,9 +40,8 @@ const WANDER_MAX_DELAY_MS = 4500;
  * movement doesn't flicker between front/back or left/right every frame. */
 const DIRECTION_DEADZONE = 0.25;
 
-/** Raw sprites are a 24x30 pixel-art grid rasterized at 5x; scaled so a character stands about
- * 1.5 tiles tall on the iso floor - roughly Kairosoft's character-to-desk proportion. */
-const SPRITE_SCALE = 0.26;
+/** Generated 3D employee cells are 307x512; this produces a roughly 62px-tall office figure. */
+const SPRITE_SCALE = 0.13;
 
 /** Walk-cycle frame rate: the sprite alternates walk1/walk2 in sync with the bounce (t * 13 rad/s
  * ~= 2 steps per second), the classic Kairosoft two-frame shuffle. */
@@ -55,17 +54,6 @@ const NAME_STYLE = new TextStyle({
   fontWeight: "600",
   stroke: { color: 0xffffff, width: 3 },
 });
-
-const ROLE_COLOR: Record<string, number> = {
-  main: 0x1e88e5,
-  explore: 0x5c6bc0,
-  plan: 0x8e24aa,
-  implementation: 0x1e88e5,
-  test: 0x43a047,
-  devops: 0xf4511e,
-  github: 0x263238,
-  generic: 0x757575,
-};
 
 /** STEP10: what the speech bubble above the head shows per state (empty = no bubble). */
 const STATE_ICON: Record<string, string> = {
@@ -89,23 +77,13 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Shifts a base role color's brightness by avatarVariant (0-7) so coworkers sharing a role are still distinguishable. */
-function shadeColor(base: number, variant: number): number {
-  const factor = 0.78 + (variant % 8) * 0.06; // 0.78 .. 1.20
-  const r = Math.min(255, Math.round(((base >> 16) & 0xff) * factor));
-  const g = Math.min(255, Math.round(((base >> 8) & 0xff) * factor));
-  const b = Math.min(255, Math.round((base & 0xff) * factor));
-  return (r << 16) + (g << 8) + b;
-}
-
 export function CharacterSprite({ employee }: { employee: Employee }) {
   const selectEmployee = useOfficeStore((s) => s.selectEmployee);
   const initialPos = useRef(areaSlotFor(employee.areaId, employee.agentId)).current;
 
   const outerRef = useRef<PixiContainer | null>(null);
   const bodyGroupRef = useRef<PixiContainer | null>(null);
-  const bodySpriteRef = useRef<PixiSprite | null>(null);
-  const detailsSpriteRef = useRef<PixiSprite | null>(null);
+  const characterSpriteRef = useRef<PixiSprite | null>(null);
   const shadowRef = useRef<PixiGraphics | null>(null);
   /** Current position in world tiles. */
   const posRef = useRef({ ...initialPos });
@@ -196,7 +174,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     if (!moving) facingRef.current = poseForState(employee.state) === "working" ? "back" : "front";
 
     if (outerRef.current) {
-      const screen = isoToScreen(posRef.current.x, posRef.current.y);
+      const screen = realisticToScreen(posRef.current.x, posRef.current.y);
       outerRef.current.position.set(screen.x, screen.y);
       // Live painter's-algorithm depth so the character sorts correctly against walls/furniture.
       outerRef.current.zIndex = isoDepth(posRef.current.x, posRef.current.y) + 0.02;
@@ -226,22 +204,15 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       shadowRef.current.fill({ color: 0x000000, alpha: 0.2 });
     }
 
-    // Real two-frame walk animation while moving (legs/arms alternate, Kairosoft-style); the
-    // state pose applies once the character has arrived.
-    const pose: CharacterPose = moving
-      ? Math.sin(t * WALK_CYCLE_RATE) >= 0
-        ? "walk1"
-        : "walk2"
-      : poseForState(employee.state);
-    const facedTextures = characterTextures(employee.avatarVariant, pose, facingRef.current);
-    if (bodySpriteRef.current) bodySpriteRef.current.texture = facedTextures.body;
-    if (detailsSpriteRef.current) detailsSpriteRef.current.texture = facedTextures.details;
+    // The realistic sheet provides matched front/back renders. Movement still uses the existing
+    // bounce and sway, while facing swaps the appropriate high-resolution crop.
+    if (characterSpriteRef.current) {
+      characterSpriteRef.current.texture = realisticCharacterTexture(employee.avatarVariant, facingRef.current);
+    }
   });
 
-  const tint = shadeColor(ROLE_COLOR[employee.role] ?? ROLE_COLOR["generic"] ?? 0x757575, employee.avatarVariant);
   const icon = STATE_ICON[employee.state] ?? "";
-  const pose = poseForState(employee.state);
-  const textures = characterTextures(employee.avatarVariant, pose, facingRef.current);
+  const texture = realisticCharacterTexture(employee.avatarVariant, facingRef.current);
 
   const drawShadow = (g: PixiGraphics) => {
     g.clear();
@@ -275,10 +246,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     >
       <pixiGraphics ref={shadowRef} draw={drawShadow} />
       <pixiContainer ref={bodyGroupRef}>
-        {/* Two-layer pixel-art sprite: a tintable "shirt" bitmap under a fixed-color details bitmap
-            (hair/skin/eyes/pants), so per-role/avatar tinting never discolors skin or hair. */}
-        <pixiSprite ref={bodySpriteRef} texture={textures.body} anchor={{ x: 0.5, y: 1 }} tint={tint} />
-        <pixiSprite ref={detailsSpriteRef} texture={textures.details} anchor={{ x: 0.5, y: 1 }} />
+        <pixiSprite ref={characterSpriteRef} texture={texture} anchor={{ x: 0.5, y: 1 }} />
       </pixiContainer>
       <pixiGraphics draw={drawBubble} />
       {icon && <pixiText text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}

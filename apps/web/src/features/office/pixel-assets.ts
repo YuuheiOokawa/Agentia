@@ -1,4 +1,4 @@
-import { Assets, Texture, TextureSource } from "pixi.js";
+import { Assets, Rectangle, Texture, TextureSource } from "pixi.js";
 import type { CharacterState } from "@agentia/shared-types";
 import type { FurnitureProp } from "./map/map";
 
@@ -6,6 +6,10 @@ import type { FurnitureProp } from "./map/map";
 TextureSource.defaultOptions.scaleMode = "nearest";
 
 const SPRITE_BASE = "/sprites";
+const REALISTIC_OFFICE_URL = "/office/agentia-office-realistic-v1.png";
+const REALISTIC_CHARACTER_SHEET_URL = "/office/characters/agentia-characters-realistic-v2.png";
+const REALISTIC_CHARACTER_COLUMNS = 5;
+const REALISTIC_CHARACTER_ROWS = 2;
 
 export type CharacterPose = "idle" | "working" | "error" | "completed" | "walk1" | "walk2";
 /** Which way the character is drawn facing - "front" (toward the viewer) or "back" (walking away/up),
@@ -46,7 +50,7 @@ function propUrl(prop: FurnitureProp): string {
 const WINDOW_URL = `${SPRITE_BASE}/prop_window.png`;
 
 function allAssetUrls(): string[] {
-  const urls: string[] = [WINDOW_URL];
+  const urls: string[] = [WINDOW_URL, REALISTIC_OFFICE_URL, REALISTIC_CHARACTER_SHEET_URL];
   for (const prop of FURNITURE_PROPS) urls.push(propUrl(prop));
   for (let variant = 0; variant < CHARACTER_VARIANT_COUNT; variant += 1) {
     for (const pose of POSES) {
@@ -104,6 +108,38 @@ export function characterTextures(avatarVariant: number, pose: CharacterPose, fa
 
 export function furnitureTexture(prop: FurnitureProp): Texture {
   return Assets.get<Texture>(propUrl(prop));
+}
+
+/** High-resolution architectural background generated for the realistic office presentation. */
+export function realisticOfficeTexture(): Texture {
+  const texture = Assets.get<Texture>(REALISTIC_OFFICE_URL);
+  texture.source.scaleMode = "linear";
+  return texture;
+}
+
+const realisticCharacterFrames = new Map<string, Texture>();
+
+/**
+ * Crops one front/back employee render from the generated 5x2 sheet. Keeping it as one source
+ * image avoids ten separate network requests while still allowing Pixi to swap facing per frame.
+ */
+export function realisticCharacterTexture(avatarVariant: number, facing: Facing): Texture {
+  const variant = Math.abs(avatarVariant) % REALISTIC_CHARACTER_COLUMNS;
+  const key = `${variant}:${facing}`;
+  const cached = realisticCharacterFrames.get(key);
+  if (cached) return cached;
+
+  const sheet = Assets.get<Texture>(REALISTIC_CHARACTER_SHEET_URL);
+  sheet.source.scaleMode = "linear";
+  const frameWidth = sheet.width / REALISTIC_CHARACTER_COLUMNS;
+  const frameHeight = sheet.height / REALISTIC_CHARACTER_ROWS;
+  const row = facing === "front" ? 0 : 1;
+  const texture = new Texture({
+    source: sheet.source,
+    frame: new Rectangle(variant * frameWidth, row * frameHeight, frameWidth, frameHeight),
+  });
+  realisticCharacterFrames.set(key, texture);
+  return texture;
 }
 
 /** Wall-mounted window prop for exterior-facing (topmost row) walls, untinted like furniture. */
