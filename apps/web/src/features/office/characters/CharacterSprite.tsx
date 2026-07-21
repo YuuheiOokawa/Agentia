@@ -51,6 +51,12 @@ const SCREEN_DIRECTION_DEADZONE = 1.5;
 /** Generated 3D employee cells are 307x512; this produces a roughly 62px-tall office figure. */
 const SPRITE_SCALE = 0.13;
 
+/** Measured feet baseline (fraction of frame height, 0=top/1=bottom) per facing in the generated
+ * sheet: the "front" render's shoes reach almost to the frame edge, but "back" leaves a visibly
+ * taller gap below the heels. Anchoring both at a flat y=1 left back-facing characters (the common
+ * "working"/seated pose) hovering a few px above their own shadow. */
+const FEET_ANCHOR_Y: Record<Facing, number> = { front: 0.975, back: 0.91 };
+
 /** Walk-cycle frame rate: the sprite alternates walk1/walk2 in sync with the bounce (t * 13 rad/s
  * ~= 2 steps per second), the classic Kairosoft two-frame shuffle. */
 const WALK_CYCLE_RATE = 13;
@@ -245,6 +251,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     // bounce and sway, while facing swaps the appropriate high-resolution crop.
     if (characterSpriteRef.current) {
       characterSpriteRef.current.texture = realisticCharacterTexture(employee.avatarVariant, facingRef.current);
+      characterSpriteRef.current.anchor.set(0.5, FEET_ANCHOR_Y[facingRef.current]);
     }
   });
 
@@ -283,7 +290,7 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
     >
       <pixiGraphics ref={shadowRef} draw={drawShadow} />
       <pixiContainer ref={bodyGroupRef}>
-        <pixiSprite ref={characterSpriteRef} texture={texture} anchor={{ x: 0.5, y: 1 }} />
+        <pixiSprite ref={characterSpriteRef} texture={texture} anchor={{ x: 0.5, y: FEET_ANCHOR_Y[facingRef.current] }} />
       </pixiContainer>
       <pixiGraphics draw={drawBubble} />
       {icon && <pixiText text={icon} x={0} y={-52} anchor={0.5} style={ICON_STYLE} />}
