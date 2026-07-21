@@ -30,7 +30,7 @@ import {
 extend({ Container, Graphics, Sprite, Text });
 
 /** Movement happens in WORLD (tile) units over A* waypoints (pathfinding.ts); rendering converts per tick. */
-const WALK_SPEED_TILES_PER_MS = 0.005;
+const WALK_SPEED_TILES_PER_MS = 0.0062;
 const ARRIVAL_EPSILON_TILES = 0.08;
 /** Time to ramp from a standstill to full walk speed - an instant 0-to-full-speed step reads as
  * a teleport-ish twitch, especially over the short hops between adjacent desks. */
@@ -57,9 +57,15 @@ const SPRITE_SCALE = 0.13;
  * "working"/seated pose) hovering a few px above their own shadow. */
 const FEET_ANCHOR_Y: Record<Facing, number> = { front: 0.975, back: 0.91 };
 
-/** Walk-cycle frame rate: the sprite alternates walk1/walk2 in sync with the bounce (t * 13 rad/s
- * ~= 2 steps per second), the classic Kairosoft two-frame shuffle. */
-const WALK_CYCLE_RATE = 13;
+/** Walk-cycle frame rate: the sprite alternates walk1/walk2 in sync with the bounce (t * 16 rad/s
+ * ~= 2.5 steps per second), the classic Kairosoft brisk two-frame shuffle. */
+const WALK_CYCLE_RATE = 16;
+/** Peak vertical hop height (px) at full speed - Kairosoft's characters bounce noticeably more
+ * than a realistic gait would, which is most of what reads as "lively" instead of "sliding". */
+const HOP_HEIGHT_PX = 4.2;
+/** Squash-and-stretch magnitude: >1 stretches taller/thinner near the top of the hop, <1 squashes
+ * shorter/wider right at footfall - the other half of the classic bouncy-game feel. */
+const SQUASH_STRETCH_AMOUNT = 0.16;
 
 const ICON_STYLE = new TextStyle({ fontSize: 12 });
 const NAME_STYLE = new TextStyle({
@@ -231,9 +237,14 @@ export function CharacterSprite({ employee }: { employee: Employee }) {
       const sx = SPRITE_SCALE * mirrorRef.current;
       if (moving) {
         const swayAmount = currentSpeedFactorRef.current;
-        bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * WALK_CYCLE_RATE * 2) * 0.04 * swayAmount));
-        bodyGroupRef.current.position.y = 2 - stepPhase * 2.5;
-        bodyGroupRef.current.position.x = Math.sin(t * WALK_CYCLE_RATE) * 1.4 * swayAmount;
+        // stepPhase (0 = footfall, 1 = apex of the hop) drives both the vertical bounce and an
+        // inverse-XY squash/stretch, so the character visibly compresses on landing and stretches
+        // tall mid-hop instead of just bobbing as a rigid block - a classic bouncy-platformer cue.
+        const stretch = 1 + (stepPhase - 0.35) * SQUASH_STRETCH_AMOUNT * swayAmount;
+        const squash = 1 - (stretch - 1) * 0.6;
+        bodyGroupRef.current.scale.set(sx * squash, SPRITE_SCALE * stretch);
+        bodyGroupRef.current.position.y = 2 - stepPhase * HOP_HEIGHT_PX * swayAmount;
+        bodyGroupRef.current.position.x = Math.sin(t * WALK_CYCLE_RATE) * 1.6 * swayAmount;
       } else {
         bodyGroupRef.current.scale.set(sx, SPRITE_SCALE * (1 + Math.sin(t * 2.4) * 0.02));
         bodyGroupRef.current.position.y = 2;
